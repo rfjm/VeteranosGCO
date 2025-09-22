@@ -10,7 +10,7 @@ export default function Leaderboard() {
   useEffect(() => {
     const fetchData = async () => {
       const { data: ranking, error: rankingError } = await supabase
-        .from("player_ranking")
+        .from("players")
         .select("*")
         .order("total_points", { ascending: false });
 
@@ -34,40 +34,50 @@ export default function Leaderboard() {
     fetchData();
   }, []);
 
-  if (loading) return <p className="p-4">⏳ A carregar...</p>;
-  if (error) return <p className="p-4 text-red-500">Erro: {error}</p>;
+  if (loading) return <p className="p-4 text-white">⏳ A carregar...</p>;
+  if (error) return <p className="p-4 text-red-400">Erro: {error}</p>;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto bg-white rounded-2xl shadow-lg">
-      <h1 className="text-3xl font-bold mb-6 text-center">🏆 Leaderboard</h1>
+    <div className="p-6 max-w-4xl mx-auto bg-gray-800 text-white rounded-2xl shadow-lg">
+      <h1 className="text-3xl font-bold mb-6 text-center">🏆 Ranking</h1>
 
       {mvp && (
-        <div className="mb-6 p-4 border rounded bg-purple-100 text-center">
+        <div className="mb-6 p-4 border rounded bg-purple-700 text-center text-white">
           <h2 className="font-semibold text-lg mb-2">🌟 MVP do Mês</h2>
           <p className="text-xl font-bold">{mvp.name}</p>
-          <p className="text-gray-700">{mvp.total_points} pontos</p>
+          <p className="text-gray-200">{mvp.total_points} pontos</p>
         </div>
       )}
 
-      <table className="table-auto w-full border rounded overflow-hidden shadow-sm">
+      <table className="table-auto w-full border-collapse rounded overflow-hidden">
         <thead>
-          <tr className="bg-gray-200">
-            <th className="p-2 border">Nome</th>
-            <th className="p-2 border">Treinos</th>
-            <th className="p-2 border">Total</th>
-            <th className="p-2 border">Média</th>
+          <tr className="bg-gray-700 text-gray-200">
+            <th className="p-2 border border-gray-600">Nome</th>
+            <th className="p-2 border border-gray-600">Treinos</th>
+            <th className="p-2 border border-gray-600">Total</th>
+            <th className="p-2 border border-gray-600">Média</th>
           </tr>
         </thead>
         <tbody>
           {players.map((p, i) => (
             <tr
-              key={p.player_id}
-              className={`${i % 2 === 0 ? "bg-gray-50" : "bg-white"} text-center`}
+              key={p.id}
+              className={`${
+                i % 2 === 0 ? "bg-gray-900" : "bg-gray-800"
+              } text-center`}
             >
-              <td className="p-2 border font-medium">{p.name}</td>
-              <td className="p-2 border">{p.trainings_played}</td>
-              <td className="p-2 border font-bold">{p.total_points}</td>
-              <td className="p-2 border">{p.average_points}</td>
+              <td className="p-2 border border-gray-700 font-medium">
+                {p.name}
+              </td>
+              <td className="p-2 border border-gray-700">
+                {p.trainings_played}
+              </td>
+              <td className="p-2 border border-gray-700 font-bold text-yellow-400">
+                {p.total_points}
+              </td>
+              <td className="p-2 border border-gray-700">
+                {p.average_points}
+              </td>
             </tr>
           ))}
         </tbody>

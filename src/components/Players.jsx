@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
-const ADMIN_PASS = "treino123"; // change this
+const ADMIN_PASS = "treino123";
 
 export default function Players() {
   const [players, setPlayers] = useState([]);
@@ -16,9 +16,10 @@ export default function Players() {
 
   const fetchPlayers = async () => {
     const { data, error } = await supabase
-      .from("players")
+      .from("players") // 👈 agora vai buscar à VIEW
       .select("*")
       .order("name", { ascending: true });
+
     if (error) setError(error.message);
     else setPlayers(data || []);
   };
@@ -28,7 +29,7 @@ export default function Players() {
     if (!newName.trim()) return;
 
     const { error } = await supabase.from("players").insert([
-      { name: newName, attendance: 0, total_points: 0 },
+      { name: newName, total_points: 0 }, // já não tem attendance
     ]);
 
     if (error) setError(error.message);
@@ -48,7 +49,7 @@ export default function Players() {
   };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto bg-white rounded-2xl shadow-lg">
+    <div className="p-6 max-w-2xl mx-auto bg-gray-800 text-white rounded-2xl shadow-lg">
       <h1 className="text-3xl font-bold mb-6 text-center">👥 Jogadores</h1>
 
       {error && (
@@ -56,12 +57,12 @@ export default function Players() {
       )}
 
       {/* Player list */}
-      <ul className="divide-y divide-gray-200 mb-6">
+      <ul className="divide-y divide-gray-700 mb-6">
         {players.map((p) => (
-          <li key={p.id} className="py-2 flex justify-between">
+          <li key={p.id} className="py-3 flex justify-between">
             <span className="font-medium">{p.name}</span>
-            <span className="text-sm text-gray-600">
-              Treinos: {p.attendance} | Pontos: {p.total_points}
+            <span className="text-sm text-gray-400">
+              Treinos: {p.trainings_played} | Pontos: {p.total_points}
             </span>
           </li>
         ))}
@@ -69,13 +70,13 @@ export default function Players() {
 
       {/* Admin section */}
       {!isAdmin ? (
-        <div className="mt-4 p-4 border rounded bg-gray-50">
+        <div className="mt-4 p-4 border rounded bg-gray-700">
           <h2 className="font-semibold mb-2">🔒 Admin login</h2>
           <div className="flex gap-2">
             <input
               type="password"
               placeholder="Password"
-              className="border px-3 py-2 flex-1 rounded"
+              className="border px-3 py-2 flex-1 rounded bg-gray-600 text-white"
               value={passInput}
               onChange={(e) => setPassInput(e.target.value)}
             />
@@ -90,14 +91,14 @@ export default function Players() {
       ) : (
         <form
           onSubmit={handleAddPlayer}
-          className="mt-4 p-4 border rounded bg-green-50"
+          className="mt-4 p-4 border rounded bg-green-50 bg-opacity-10"
         >
           <h2 className="font-semibold mb-2">➕ Adicionar Jogador</h2>
           <div className="flex gap-2">
             <input
               type="text"
               placeholder="Nome do jogador"
-              className="border px-3 py-2 flex-1 rounded"
+              className="border px-3 py-2 flex-1 rounded bg-gray-600 text-white"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
             />
