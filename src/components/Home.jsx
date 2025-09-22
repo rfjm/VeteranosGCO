@@ -1,11 +1,9 @@
 export default function Home() {
   return (
-    <div className="flex flex-col items-center text-center">
-      <h1 className="text-4xl font-bold mb-8 flex items-center gap-2">
-        🏀 Basket App
-      </h1>
-      <p className="text-lg text-gray-400">
-        Bem-vindo ao Basket App! Use a navegação acima para começar 👆
+    <div className="max-w-2xl mx-auto text-center bg-gray-800 p-6 rounded-2xl shadow-lg">
+      <h1 className="text-3xl sm:text-4xl font-bold mb-4">🏀 Basket App</h1>
+      <p className="text-gray-300">
+        Bem-vindo! Use o menu para navegar entre jogadores, treinos, jogos e ranking.
       </p>
     </div>
   );
