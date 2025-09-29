@@ -16,7 +16,7 @@ export default function Layout({ children }) {
             ☰
           </button>
           <nav className="hidden sm:flex gap-4">
-            <Link to="/VeteranosGCO" className="hover:text-blue-400">Home</Link>
+            <Link to="/" className="hover:text-blue-400">Home</Link>
             <Link to="/players" className="hover:text-blue-400">Players</Link>
             <Link to="/training" className="hover:text-blue-400">Training</Link>
             <Link to="/leaderboard" className="hover:text-blue-400">Ranking</Link>

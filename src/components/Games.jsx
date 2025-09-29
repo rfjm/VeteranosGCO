@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabaseClient";
 
 export default function Games() {
@@ -13,8 +13,10 @@ export default function Games() {
   const [team2Score, setTeam2Score] = useState(0);
   const [showPlayers, setShowPlayers] = useState({});
   const [allPlayers, setAllPlayers] = useState([]);
+  const [teamColors, setTeamColors] = useState({});
+  const hornRef = useRef(null);
 
-  // 👉 Fetch trainings and auto-select the latest
+  // Fetch trainings and auto-select latest
   useEffect(() => {
     const fetchTrainings = async () => {
       const { data, error } = await supabase
@@ -31,7 +33,7 @@ export default function Games() {
     fetchAllPlayers();
   }, []);
 
-  // 👉 Fetch teams whenever selectedTraining changes
+  // Fetch teams when training changes
   useEffect(() => {
     if (selectedTraining) {
       fetchTeams(selectedTraining.id);
@@ -58,13 +60,19 @@ export default function Games() {
     return player ? player.name : id;
   };
 
-  // Timer effect
+  // Timer + horn
   useEffect(() => {
     let interval;
     if (running && timer > 0) {
       interval = setInterval(() => setTimer((t) => t - 1), 1000);
     } else if (timer === 0) {
       setRunning(false);
+      if (hornRef.current) {
+        hornRef.current.currentTime = 0;
+        hornRef.current.play().catch(() => {
+          console.warn("⚠️ Horn blocked until user interacts.");
+        });
+      }
     }
     return () => clearInterval(interval);
   }, [running, timer]);
@@ -104,6 +112,7 @@ export default function Games() {
         winner,
         date: selectedTraining.date,
         duration_minutes: durationChoice / 60,
+        team_colors: teamColors, // optional if you add JSON column
       },
     ]);
 
@@ -118,7 +127,6 @@ export default function Games() {
   const endTraining = async () => {
     if (!selectedTraining) return;
 
-    // fetch all teams for training
     const { data: allTeams, error: teamsErr } = await supabase
       .from("training_teams")
       .select("id, team_number, players")
@@ -129,12 +137,14 @@ export default function Games() {
       alert("Erro ao buscar equipas: " + teamsErr.message);
       return;
     }
+    if (!allTeams || allTeams.length < 2) {
+      alert("⚠️ São necessárias pelo menos 2 equipas.");
+      return;
+    }
 
-    // init wins
     const winsMap = {};
     for (const t of allTeams) winsMap[t.team_number] = 0;
 
-    // fetch games
     const { data: games, error: gamesErr } = await supabase
       .from("games")
       .select("winner")
@@ -151,7 +161,6 @@ export default function Games() {
       }
     }
 
-    // rank teams
     const ranking = allTeams
       .map((t) => ({
         team_number: t.team_number,
@@ -168,11 +177,13 @@ export default function Games() {
       const add = pointsByPlace[i];
 
       for (const playerId of team.players) {
-        const { data: current } = await supabase
+        const { data: current, error: curErr } = await supabase
           .from("players")
           .select("total_points")
           .eq("id", playerId)
           .single();
+
+        if (curErr) continue;
 
         const newTotal = (current?.total_points || 0) + add;
 
@@ -183,29 +194,57 @@ export default function Games() {
       }
     }
 
-    alert("✅ Pontos atribuídos!");
+    await supabase.from("training_teams").delete().eq("training_id", selectedTraining.id);
+
+    alert("✅ Pontos atribuídos e equipas removidas!");
   };
 
   return (
     <div className="p-6 max-w-6xl mx-auto bg-gray-900 text-white rounded-2xl shadow-lg">
       <h1 className="text-4xl font-bold mb-8 text-center">🎮 Jogos</h1>
 
-      {/* Duration selector */}
-      <div className="flex justify-center mb-6">
-        <label className="mr-3 font-semibold">⏱ Duração:</label>
-        <select
-          value={durationChoice}
-          onChange={(e) => {
-            setDurationChoice(Number(e.target.value));
-            setTimer(Number(e.target.value));
-          }}
-          className="px-3 py-2 rounded bg-gray-700 border border-gray-600"
-        >
-          <option value={300}>5 min</option>
-          <option value={600}>10 min</option>
-          <option value={900}>15 min</option>
-          <option value={1200}>20 min</option>
-        </select>
+      {/* Timer duration selector */}
+      <div className="flex justify-center gap-6 mb-8">
+        <div className="text-center">
+          <label className="block mb-2 text-lg font-semibold">Min</label>
+          <select
+            value={Math.floor(durationChoice / 60)}
+            onChange={(e) => {
+              const mins = Number(e.target.value);
+              const secs = durationChoice % 60;
+              const total = mins * 60 + secs;
+              setDurationChoice(total);
+              setTimer(total);
+            }}
+            className="w-28 h-16 text-2xl font-bold rounded bg-gray-700 border border-gray-600 text-center"
+          >
+            {[...Array(21).keys()].map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="text-center">
+          <label className="block mb-2 text-lg font-semibold">Seg</label>
+          <select
+            value={durationChoice % 60}
+            onChange={(e) => {
+              const secs = Number(e.target.value);
+              const mins = Math.floor(durationChoice / 60);
+              const total = mins * 60 + secs;
+              setDurationChoice(total);
+              setTimer(total);
+            }}
+            className="w-28 h-16 text-2xl font-bold rounded bg-gray-700 border border-gray-600 text-center"
+          >
+            {[0, 10, 20, 30, 40, 50].map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Teams */}
@@ -247,6 +286,34 @@ export default function Games() {
         ))}
       </div>
 
+      {/* Team color selector */}
+      {selectedTeams.length === 2 && (
+        <div className="flex justify-center gap-6 mb-6">
+          {selectedTeams.map((team) => (
+            <div key={team.id} className="text-center">
+              <label className="block mb-2 font-semibold">
+                Equipa {team.team_number} cor:
+              </label>
+              <select
+                value={teamColors[team.id] || ""}
+                onChange={(e) =>
+                  setTeamColors((prev) => ({
+                    ...prev,
+                    [team.id]: e.target.value,
+                  }))
+                }
+                className="px-3 py-2 rounded bg-gray-700 border border-gray-600"
+              >
+                <option value="">Escolher</option>
+                <option value="black">⚫ Preto</option>
+                <option value="white">⚪ Branco</option>
+                <option value="yellow">🟡 Amarelo</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Timer + Scoreboard */}
       {selectedTeams.length === 2 && (
         <>
@@ -286,51 +353,65 @@ export default function Games() {
           </div>
 
           {/* Scoreboard */}
-          <div className="grid grid-cols-2 gap-8 mb-10 text-center">
-            <div className="bg-blue-800 p-6 rounded-2xl shadow-lg">
-              <h2 className="text-3xl font-bold mb-4">
-                Equipa {selectedTeams[0].team_number}
-              </h2>
-              <p className="text-8xl font-extrabold mb-6">{team1Score}</p>
-              <div className="flex gap-4 justify-center">
-                <button
-                  onClick={() => setTeam1Score((s) => s + 1)}
-                  className="bg-green-600 px-4 py-2 rounded text-xl"
-                >
-                  +1
-                </button>
-                <button
-                  onClick={() => setTeam1Score((s) => Math.max(0, s - 1))}
-                  className="bg-red-600 px-4 py-2 rounded text-xl"
-                >
-                  -1
-                </button>
-              </div>
-            </div>
+<div className="grid grid-cols-2 gap-8 mb-10 text-center">
+  {selectedTeams.map((team, idx) => {
+    const bg = teamColors[team.id] || (idx === 0 ? "blue" : "red");
 
-            <div className="bg-red-800 p-6 rounded-2xl shadow-lg">
-              <h2 className="text-3xl font-bold mb-4">
-                Equipa {selectedTeams[1].team_number}
-              </h2>
-              <p className="text-8xl font-extrabold mb-6">{team2Score}</p>
-              <div className="flex gap-4 justify-center">
-                <button
-                  onClick={() => setTeam2Score((s) => s + 1)}
-                  className="bg-green-600 px-4 py-2 rounded text-xl"
-                >
-                  +1
-                </button>
-                <button
-                  onClick={() => setTeam2Score((s) => Math.max(0, s - 1))}
-                  className="bg-red-600 px-4 py-2 rounded text-xl"
-                >
-                  -1
-                </button>
-              </div>
-            </div>
-          </div>
+    // Lighter background versions
+    const bgMap = {
+      black: "#333333", // dark gray instead of pure black
+      white: "#f9f9f9", // light white/gray
+      yellow: "#fff176", // soft yellow
+      blue: "#2563eb",   // Tailwind blue-600
+      red: "#dc2626",    // Tailwind red-600
+    };
 
-          {/* End training button */}
+    // Text color depending on background
+    const textColor = ["white", "yellow"].includes(teamColors[team.id])
+      ? "text-gray-900"
+      : "text-white";
+
+    return (
+      <div
+        key={team.id}
+        className={`p-6 rounded-2xl shadow-lg ${textColor}`}
+        style={{ backgroundColor: bgMap[bg] }}
+      >
+        <h2 className="text-3xl font-bold mb-4">
+          Equipa {team.team_number}
+        </h2>
+        <p className="text-8xl font-extrabold mb-6">
+          {idx === 0 ? team1Score : team2Score}
+        </p>
+        <div className="flex gap-4 justify-center">
+          <button
+            onClick={() =>
+              idx === 0
+                ? setTeam1Score((s) => s + 1)
+                : setTeam2Score((s) => s + 1)
+            }
+            className="bg-green-600 px-4 py-2 rounded text-xl"
+          >
+            +1
+          </button>
+          <button
+            onClick={() =>
+              idx === 0
+                ? setTeam1Score((s) => Math.max(0, s - 1))
+                : setTeam2Score((s) => Math.max(0, s - 1))
+            }
+            className="bg-red-600 px-4 py-2 rounded text-xl"
+          >
+            -1
+          </button>
+        </div>
+      </div>
+    );
+  })}
+</div>
+
+
+          {/* End training */}
           <div className="text-center mt-8">
             <button
               onClick={endTraining}
@@ -341,6 +422,8 @@ export default function Games() {
           </div>
         </>
       )}
+
+      <audio ref={hornRef} src="/horn.mp3" preload="auto" />
     </div>
   );
 }

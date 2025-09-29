@@ -8,10 +8,9 @@ import Games from "./components/Games";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Layout>
+  <BrowserRouter basename="/VeteranosGCO">      <Layout>
         <Routes>
-          <Route path="/VeteranosGCO" element={<Home />} />
+          <Route path="/" element={<Home />} />
           <Route path="/players" element={<Players />} />
           <Route path="/training" element={<Training />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
