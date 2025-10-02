@@ -57,7 +57,7 @@ export default function Games() {
       setTeams(data || []);
       const defaults = {};
       (data || []).forEach((t) => {
-        defaults[t.team_number] = "black"; // default color
+        defaults[t.team_number] = "black";
       });
       setTeamColors(defaults);
     }
@@ -153,6 +153,81 @@ export default function Games() {
     }
   };
 
+  const endTraining = async () => {
+    if (!selectedTraining) return;
+
+    const { data: allTeams, error: teamsErr } = await supabase
+      .from("training_teams")
+      .select("id, team_number, players")
+      .eq("training_id", selectedTraining.id)
+      .order("team_number");
+
+    if (teamsErr) {
+      alert("Erro ao buscar equipas: " + teamsErr.message);
+      return;
+    }
+    if (!allTeams || allTeams.length < 2) {
+      alert("⚠️ São necessárias pelo menos 2 equipas.");
+      return;
+    }
+
+    const winsMap = {};
+    for (const t of allTeams) winsMap[t.team_number] = 0;
+
+    const { data: games, error: gamesErr } = await supabase
+      .from("games")
+      .select("winner")
+      .eq("training_id", selectedTraining.id);
+
+    if (gamesErr) {
+      alert("Erro ao buscar jogos: " + gamesErr.message);
+      return;
+    }
+
+    for (const g of (games || [])) {
+      if (g?.winner != null && winsMap[g.winner] != null) {
+        winsMap[g.winner] += 1;
+      }
+    }
+
+    const ranking = allTeams
+      .map((t) => ({
+        team_number: t.team_number,
+        players: t.players || [],
+        wins: winsMap[t.team_number] || 0,
+      }))
+      .sort((a, b) => b.wins - a.wins);
+
+    const places = Math.min(ranking.length, 3);
+    const pointsByPlace = places === 2 ? [3, 2] : [3, 2, 1];
+
+    for (let i = 0; i < places; i++) {
+      const team = ranking[i];
+      const add = pointsByPlace[i];
+
+      for (const playerId of team.players) {
+        const { data: current, error: curErr } = await supabase
+          .from("players")
+          .select("total_points")
+          .eq("id", playerId)
+          .single();
+
+        if (curErr) continue;
+
+        const newTotal = (current?.total_points || 0) + add;
+
+        await supabase
+          .from("players")
+          .update({ total_points: newTotal })
+          .eq("id", playerId);
+      }
+    }
+
+    await supabase.from("training_teams").delete().eq("training_id", selectedTraining.id);
+
+    alert("✅ Pontos atribuídos e equipas removidas!");
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto bg-gray-900 text-white rounded-2xl shadow-lg">
       <h1 className="text-4xl font-bold mb-8 text-center">🎮 Jogos</h1>
@@ -171,47 +246,7 @@ export default function Games() {
         </div>
       )}
 
-      {/* Timer settings */}
-      <div className="flex justify-center gap-6 mb-8">
-        <div className="text-center">
-          <label className="block mb-2 text-lg font-semibold">Min</label>
-          <select
-            value={Math.floor(durationChoice / 60)}
-            onChange={(e) => {
-              const mins = Number(e.target.value);
-              const secs = durationChoice % 60;
-              const total = mins * 60 + secs;
-              setDurationChoice(total);
-              setTimer(total);
-            }}
-            className="w-28 h-16 text-2xl font-bold rounded bg-gray-700 border border-gray-600 text-center"
-          >
-            {[...Array(21).keys()].map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-        <div className="text-center">
-          <label className="block mb-2 text-lg font-semibold">Seg</label>
-          <select
-            value={durationChoice % 60}
-            onChange={(e) => {
-              const secs = Number(e.target.value);
-              const mins = Math.floor(durationChoice / 60);
-              const total = mins * 60 + secs;
-              setDurationChoice(total);
-              setTimer(total);
-            }}
-            className="w-28 h-16 text-2xl font-bold rounded bg-gray-700 border border-gray-600 text-center"
-          >
-            {[0, 10, 20, 30, 40, 50].map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Teams selection with 3-color dropdown */}
+      {/* Teams with color selector */}
       <h2 className="text-xl font-semibold mb-4">Escolhe 2 equipas:</h2>
       <div className="grid md:grid-cols-3 gap-4 mb-8">
         {teams.map((team) => {
@@ -285,7 +320,6 @@ export default function Games() {
             </div>
           </div>
 
-          {/* Scoreboard */}
           <div className="grid grid-cols-2 gap-8 mb-10 text-center">
             {selectedTeams.map((team, idx) => {
               const color = teamColors[team.team_number] || "black";
@@ -295,11 +329,7 @@ export default function Games() {
               const setScore = idx === 0 ? setTeam1Score : setTeam2Score;
 
               return (
-                <div
-                  key={idx}
-                  className="p-6 rounded-2xl shadow-lg"
-                  style={{ backgroundColor: bg, color: text }}
-                >
+                <div key={idx} className="p-6 rounded-2xl shadow-lg" style={{ backgroundColor: bg, color: text }}>
                   <h2 className="text-3xl font-bold mb-4">Equipa {team.team_number}</h2>
                   <p className="text-8xl font-extrabold mb-6">{score}</p>
                   <div className="flex gap-4 justify-center">
@@ -309,6 +339,16 @@ export default function Games() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Finish training */}
+          <div className="text-center mt-8">
+            <button
+              onClick={endTraining}
+              className="bg-purple-600 hover:bg-purple-700 px-6 py-3 text-xl rounded"
+            >
+              🏁 Finalizar Treino
+            </button>
           </div>
         </>
       )}
