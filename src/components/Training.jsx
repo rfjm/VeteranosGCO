@@ -96,12 +96,41 @@
     };
 
     const saveAttendance = async () => {
-      if (!selectedTraining) return;
-      await supabase.from("training_attendance").delete().eq("training_id", selectedTraining.id);
-      const rows = present.map((pid) => ({ training_id: selectedTraining.id, player_id: pid }));
-      await supabase.from("training_attendance").insert(rows);
-      alert("✅ Presenças guardadas!");
-    };
+  if (!selectedTraining) {
+    alert("⚠️ Nenhum treino selecionado!");
+    return;
+  }
+
+  // wipe old attendance for this training
+  const { error: delError } = await supabase
+    .from("training_attendance")
+    .delete()
+    .eq("training_id", selectedTraining.id);
+
+  if (delError) {
+    alert("❌ Erro ao apagar presenças: " + delError.message);
+    return;
+  }
+
+  // insert new attendance
+  const rows = present.map((pid) => ({
+    training_id: selectedTraining.id,
+    player_id: pid,
+  }));
+
+  const { error: insError } = await supabase
+    .from("training_attendance")
+    .insert(rows);
+
+  if (insError) {
+    alert("❌ Erro ao guardar presenças: " + insError.message);
+    return;
+  }
+
+  alert("✅ Presenças guardadas!");
+};
+
+
 
     const checkPassword = () => {
       if (passInput === ADMIN_PASS) {
