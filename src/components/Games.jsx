@@ -13,10 +13,9 @@ export default function Games() {
   const [team2Score, setTeam2Score] = useState(0);
   const [showPlayers, setShowPlayers] = useState({});
   const [allPlayers, setAllPlayers] = useState([]);
-  const [teamColors, setTeamColors] = useState({});
   const hornRef = useRef(null);
 
-  // Fetch trainings and auto-select latest
+  // fetch trainings
   useEffect(() => {
     const fetchTrainings = async () => {
       const { data, error } = await supabase
@@ -26,14 +25,13 @@ export default function Games() {
 
       if (!error && data.length > 0) {
         setTrainings(data);
-        setSelectedTraining(data[0]);
+        setSelectedTraining(data[0]); // pick latest
       }
     };
     fetchTrainings();
     fetchAllPlayers();
   }, []);
 
-  // Fetch teams when training changes
   useEffect(() => {
     if (selectedTraining) {
       fetchTeams(selectedTraining.id);
@@ -60,7 +58,7 @@ export default function Games() {
     return player ? player.name : id;
   };
 
-  // Timer + horn
+  // timer
   useEffect(() => {
     let interval;
     if (running && timer > 0) {
@@ -70,7 +68,7 @@ export default function Games() {
       if (hornRef.current) {
         hornRef.current.currentTime = 0;
         hornRef.current.play().catch(() => {
-          console.warn("⚠️ Horn blocked until user interacts.");
+          console.warn("⚠️ Horn blocked by browser until user interaction.");
         });
       }
     }
@@ -112,7 +110,7 @@ export default function Games() {
         winner,
         date: selectedTraining.date,
         duration_minutes: durationChoice / 60,
-        team_colors: teamColors, // optional if you add JSON column
+        // ✅ removed team_colors
       },
     ]);
 
@@ -127,6 +125,7 @@ export default function Games() {
   const endTraining = async () => {
     if (!selectedTraining) return;
 
+    // fetch all teams
     const { data: allTeams, error: teamsErr } = await supabase
       .from("training_teams")
       .select("id, team_number, players")
@@ -142,6 +141,7 @@ export default function Games() {
       return;
     }
 
+    // count wins
     const winsMap = {};
     for (const t of allTeams) winsMap[t.team_number] = 0;
 
@@ -161,6 +161,7 @@ export default function Games() {
       }
     }
 
+    // ranking
     const ranking = allTeams
       .map((t) => ({
         team_number: t.team_number,
@@ -172,28 +173,22 @@ export default function Games() {
     const places = Math.min(ranking.length, 3);
     const pointsByPlace = places === 2 ? [3, 2] : [3, 2, 1];
 
+    // update points
     for (let i = 0; i < places; i++) {
       const team = ranking[i];
       const add = pointsByPlace[i];
-
       for (const playerId of team.players) {
-        const { data: current, error: curErr } = await supabase
+        const { data: current } = await supabase
           .from("players")
           .select("total_points")
           .eq("id", playerId)
           .single();
-
-        if (curErr) continue;
-
         const newTotal = (current?.total_points || 0) + add;
-
-        await supabase
-          .from("players")
-          .update({ total_points: newTotal })
-          .eq("id", playerId);
+        await supabase.from("players").update({ total_points: newTotal }).eq("id", playerId);
       }
     }
 
+    // clean teams
     await supabase.from("training_teams").delete().eq("training_id", selectedTraining.id);
 
     alert("✅ Pontos atribuídos e equipas removidas!");
@@ -203,7 +198,7 @@ export default function Games() {
     <div className="p-6 max-w-6xl mx-auto bg-gray-900 text-white rounded-2xl shadow-lg">
       <h1 className="text-4xl font-bold mb-8 text-center">🎮 Jogos</h1>
 
-      {/* Timer duration selector */}
+      {/* duration */}
       <div className="flex justify-center gap-6 mb-8">
         <div className="text-center">
           <label className="block mb-2 text-lg font-semibold">Min</label>
@@ -254,9 +249,7 @@ export default function Games() {
           <div
             key={team.id}
             className={`p-4 rounded-xl cursor-pointer transition ${
-              selectedTeams.some((t) => t.id === team.id)
-                ? "bg-green-600"
-                : "bg-gray-700"
+              selectedTeams.some((t) => t.id === team.id) ? "bg-green-600" : "bg-gray-700"
             }`}
             onClick={() => toggleTeamSelection(team)}
           >
@@ -286,34 +279,6 @@ export default function Games() {
         ))}
       </div>
 
-      {/* Team color selector */}
-      {selectedTeams.length === 2 && (
-        <div className="flex justify-center gap-6 mb-6">
-          {selectedTeams.map((team) => (
-            <div key={team.id} className="text-center">
-              <label className="block mb-2 font-semibold">
-                Equipa {team.team_number} cor:
-              </label>
-              <select
-                value={teamColors[team.id] || ""}
-                onChange={(e) =>
-                  setTeamColors((prev) => ({
-                    ...prev,
-                    [team.id]: e.target.value,
-                  }))
-                }
-                className="px-3 py-2 rounded bg-gray-700 border border-gray-600"
-              >
-                <option value="">Escolher</option>
-                <option value="black">⚫ Preto</option>
-                <option value="white">⚪ Branco</option>
-                <option value="yellow">🟡 Amarelo</option>
-              </select>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Timer + Scoreboard */}
       {selectedTeams.length === 2 && (
         <>
@@ -323,107 +288,59 @@ export default function Games() {
             </div>
             <div className="flex justify-center gap-4 mt-6">
               {!running ? (
-                <button
-                  onClick={() => setRunning(true)}
-                  className="bg-green-600 px-6 py-3 text-xl rounded"
-                >
+                <button onClick={() => setRunning(true)} className="bg-green-600 px-6 py-3 text-xl rounded">
                   ▶️ Start
                 </button>
               ) : (
-                <button
-                  onClick={() => setRunning(false)}
-                  className="bg-yellow-600 px-6 py-3 text-xl rounded"
-                >
+                <button onClick={() => setRunning(false)} className="bg-yellow-600 px-6 py-3 text-xl rounded">
                   ⏸ Pause
                 </button>
               )}
-              <button
-                onClick={resetGame}
-                className="bg-gray-600 px-6 py-3 text-xl rounded"
-              >
+              <button onClick={resetGame} className="bg-gray-600 px-6 py-3 text-xl rounded">
                 🔄 Reset
               </button>
-              <button
-                onClick={saveGame}
-                className="bg-blue-600 px-6 py-3 text-xl rounded"
-              >
+              <button onClick={saveGame} className="bg-blue-600 px-6 py-3 text-xl rounded">
                 💾 Guardar
               </button>
             </div>
           </div>
 
           {/* Scoreboard */}
-<div className="grid grid-cols-2 gap-8 mb-10 text-center">
-  {selectedTeams.map((team, idx) => {
-    const bg = teamColors[team.id] || (idx === 0 ? "blue" : "red");
+          <div className="grid grid-cols-2 gap-8 mb-10 text-center">
+            <div className="bg-blue-800 p-6 rounded-2xl shadow-lg">
+              <h2 className="text-3xl font-bold mb-4">Equipa {selectedTeams[0].team_number}</h2>
+              <p className="text-8xl font-extrabold mb-6">{team1Score}</p>
+              <div className="flex gap-4 justify-center">
+                <button onClick={() => setTeam1Score((s) => s + 1)} className="bg-green-600 px-4 py-2 rounded text-xl">
+                  +1
+                </button>
+                <button onClick={() => setTeam1Score((s) => Math.max(0, s - 1))} className="bg-red-600 px-4 py-2 rounded text-xl">
+                  -1
+                </button>
+              </div>
+            </div>
 
-    // Lighter background versions
-    const bgMap = {
-      black: "#333333", // dark gray instead of pure black
-      white: "#f9f9f9", // light white/gray
-      yellow: "#fff176", // soft yellow
-      blue: "#2563eb",   // Tailwind blue-600
-      red: "#dc2626",    // Tailwind red-600
-    };
+            <div className="bg-red-800 p-6 rounded-2xl shadow-lg">
+              <h2 className="text-3xl font-bold mb-4">Equipa {selectedTeams[1].team_number}</h2>
+              <p className="text-8xl font-extrabold mb-6">{team2Score}</p>
+              <div className="flex gap-4 justify-center">
+                <button onClick={() => setTeam2Score((s) => s + 1)} className="bg-green-600 px-4 py-2 rounded text-xl">
+                  +1
+                </button>
+                <button onClick={() => setTeam2Score((s) => Math.max(0, s - 1))} className="bg-red-600 px-4 py-2 rounded text-xl">
+                  -1
+                </button>
+              </div>
+            </div>
+          </div>
 
-    // Text color depending on background
-    const textColor = ["white", "yellow"].includes(teamColors[team.id])
-      ? "text-gray-900"
-      : "text-white";
-
-    return (
-      <div
-        key={team.id}
-        className={`p-6 rounded-2xl shadow-lg ${textColor}`}
-        style={{ backgroundColor: bgMap[bg] }}
-      >
-        <h2 className="text-3xl font-bold mb-4">
-          Equipa {team.team_number}
-        </h2>
-        <p className="text-8xl font-extrabold mb-6">
-          {idx === 0 ? team1Score : team2Score}
-        </p>
-        <div className="flex gap-4 justify-center">
-          <button
-            onClick={() =>
-              idx === 0
-                ? setTeam1Score((s) => s + 1)
-                : setTeam2Score((s) => s + 1)
-            }
-            className="bg-green-600 px-4 py-2 rounded text-xl"
-          >
-            +1
-          </button>
-          <button
-            onClick={() =>
-              idx === 0
-                ? setTeam1Score((s) => Math.max(0, s - 1))
-                : setTeam2Score((s) => Math.max(0, s - 1))
-            }
-            className="bg-red-600 px-4 py-2 rounded text-xl"
-          >
-            -1
-          </button>
-        </div>
-      </div>
-    );
-  })}
-</div>
-
-
-          {/* End training */}
           <div className="text-center mt-8">
-            <button
-              onClick={endTraining}
-              className="bg-purple-600 hover:bg-purple-700 px-6 py-3 text-xl rounded"
-            >
+            <button onClick={endTraining} className="bg-purple-600 hover:bg-purple-700 px-6 py-3 text-xl rounded">
               🏁 Finalizar Treino
             </button>
           </div>
         </>
       )}
-
-      <audio ref={hornRef} src="/horn.mp3" preload="auto" />
-    </div>
+<audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />    </div>
   );
 }
