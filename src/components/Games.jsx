@@ -341,6 +341,8 @@ export default function Games() {
           </div>
         </>
       )}
-<audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />    </div>
+<audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />
+   
+</div>
   );
 }
