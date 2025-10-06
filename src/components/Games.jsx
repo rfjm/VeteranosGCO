@@ -7,8 +7,8 @@ export default function Games() {
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [teamColors, setTeamColors] = useState({});
-  const [timer, setTimer] = useState(600);
-  const [durationChoice, setDurationChoice] = useState(600);
+  const [timer, setTimer] = useState(300); // default 5 minutes
+  const [durationChoice, setDurationChoice] = useState(300);
   const [running, setRunning] = useState(false);
   const [team1Score, setTeam1Score] = useState(0);
   const [team2Score, setTeam2Score] = useState(0);
@@ -23,13 +23,13 @@ export default function Games() {
     yellow: { bg: "#ffff00", text: "black" },
   };
 
+  // Load trainings and players
   useEffect(() => {
     const fetchTrainings = async () => {
       const { data, error } = await supabase
         .from("trainings")
         .select("*")
         .order("date", { ascending: false });
-
       if (!error && data.length > 0) {
         setTrainings(data);
         setSelectedTraining(data[0]);
@@ -39,6 +39,7 @@ export default function Games() {
     fetchAllPlayers();
   }, []);
 
+  // Load teams and win stats
   useEffect(() => {
     if (selectedTraining) {
       fetchTeams(selectedTraining.id);
@@ -78,9 +79,7 @@ export default function Games() {
       .from("games")
       .select("winner")
       .eq("training_id", trainingId);
-
     if (error) return;
-
     const wins = {};
     for (const g of data) {
       if (g.winner != null) {
@@ -90,6 +89,7 @@ export default function Games() {
     setTeamWins(wins);
   };
 
+  // Timer logic
   useEffect(() => {
     let interval;
     if (running && timer > 0) {
@@ -224,7 +224,6 @@ export default function Games() {
     }
 
     await supabase.from("training_teams").delete().eq("training_id", selectedTraining.id);
-
     alert("✅ Pontos atribuídos e equipas removidas!");
   };
 
@@ -305,6 +304,25 @@ export default function Games() {
       {/* Timer + Scoreboard */}
       {selectedTeams.length === 2 && (
         <>
+          {/* Time Selector */}
+          <div className="flex items-center justify-center mb-6">
+            <label className="mr-3 text-lg">⏱️ Duração:</label>
+            <select
+              value={durationChoice}
+              onChange={(e) => {
+                const newDuration = parseInt(e.target.value, 10);
+                setDurationChoice(newDuration);
+                setTimer(newDuration);
+              }}
+              className="text-black px-3 py-2 rounded"
+            >
+              <option value={300}>5 minutos</option>
+              <option value={600}>10 minutos</option>
+              <option value={900}>15 minutos</option>
+              <option value={1200}>20 minutos</option>
+            </select>
+          </div>
+
           <div className="text-center mb-10">
             <div className="text-8xl md:text-9xl font-mono font-bold">
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, "0")}
