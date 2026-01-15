@@ -290,7 +290,7 @@ export default function Games() {
               {showPlayers[team.id] && (
                 <ul className="mt-2 space-y-1">
                   {team.players.map((pid, i) => (
-                    <li key={i} className="bg-gray-800 rounded px-2 py-1">
+                    <li key={i} className="bg-blue-600 rounded px-2 py-1">
                       {getPlayerName(pid)}
                     </li>
                   ))}
