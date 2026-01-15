@@ -318,8 +318,8 @@ export default function Games() {
             >
               <option value={300}>5 minutos</option>
               <option value={600}>10 minutos</option>
-              <option value={900}>15 minutos</option>
-              <option value={1200}>20 minutos</option>
+              <option value={360}>6 minutos</option>
+              <option value={720}>12 minutos</option>
             </select>
           </div>
 
