@@ -2,9 +2,10 @@
   import { supabase } from "../supabaseClient";
   import { createBalancedTeams, getTeamAverage } from "../utils/teamGenerator";
   import { useAuth } from "../useAuth";
+  import TrainingCalendar from "./TrainingCalendar";
+  import { dateFromKey, dateKey } from "../utils/calendar";
 
   export default function Training() {
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
     const [players, setPlayers] = useState([]);
     const [present, setPresent] = useState([]); // array of player IDs
     const [trainings, setTrainings] = useState([]);
@@ -54,11 +55,28 @@
     };
 
     const createTraining = async () => {
-      const { data, error } = await supabase.from("trainings").insert([{ date }]).select().single();
+      const today = dateKey(new Date());
+      const existingTraining = trainings.find(
+        (training) => String(training.date).slice(0, 10) === today,
+      );
+
+      if (existingTraining) {
+        setSelectedTraining(existingTraining);
+        alert("ℹ️ O treino de hoje já existe e foi selecionado.");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("trainings")
+        .insert([{ date: today }])
+        .select()
+        .single();
       if (error) setError(error.message);
       else {
         setSelectedTraining(data);
-        fetchTrainings();
+        setTrainings((current) =>
+          [data, ...current].sort((a, b) => String(b.date).localeCompare(String(a.date))),
+        );
       }
     };
 
@@ -79,12 +97,6 @@
           // The training is still deleted if the optional stats refresh fails.
         }
       }
-    };
-
-    const updateTraining = async (id, newDate) => {
-      const { error } = await supabase.from("trainings").update({ date: newDate }).eq("id", id);
-      if (error) setError(error.message);
-      else fetchTrainings();
     };
 
     const togglePresence = (id) => {
@@ -231,65 +243,36 @@
 
         {error && <p className="text-red-400 mb-4">{error}</p>}
 
-        {/* Create new training */}
+        {/* Create today's training */}
         {isAdmin && (
-          <div className="mb-6 flex flex-col sm:flex-row gap-2 items-center justify-center">
-            <label className="font-semibold">Data:</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="px-3 py-2 rounded bg-gray-700 border border-gray-600 text-white"
-            />
+          <div className="mb-6 flex justify-center">
             <button onClick={createTraining} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full sm:w-auto">
-              Criar treino
+              Criar treino de hoje
             </button>
           </div>
         )}
 
-        {/* Trainings list */}
-        <h2 className="text-xl font-semibold mb-2">📅 Treinos Anteriores</h2>
-        <ul className="divide-y divide-gray-700 mb-6">
-          {trainings.map((t) => (
-            <li
-              key={t.id}
-              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-3 px-3 rounded hover:bg-gray-700 cursor-pointer ${
-                selectedTraining?.id === t.id ? "bg-gray-700" : ""
-              }`}
-              onClick={() => {
-                if (selectedTraining?.id === t.id) {
-                  setSelectedTraining(null);
-                  setPresent([]);
-                  setTeams([]);
-                  setEditMode(false);
-                } else {
-                  setSelectedTraining(t);
-                }
-              }}
-            >
-              <span>{new Date(t.date).toLocaleDateString()}</span>
-              {isAdmin && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="date"
-                    defaultValue={t.date}
-                    onChange={(e) => updateTraining(t.id, e.target.value)}
-                    className="px-2 py-1 rounded bg-gray-700 border border-gray-600 text-white text-sm"
-                  />
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteTraining(t.id);
-                    }}
-                    className="text-red-400 hover:text-red-600 text-sm"
-                  >
-                    Apagar
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        <TrainingCalendar
+          trainings={trainings}
+          selectedTraining={selectedTraining}
+          onSelect={setSelectedTraining}
+        />
+
+        {selectedTraining && (
+          <div className="mb-6 flex flex-col items-center justify-between gap-2 rounded-lg bg-gray-700 p-3 sm:flex-row">
+            <p>
+              Treino selecionado: <strong>{dateFromKey(selectedTraining.date).toLocaleDateString("pt-PT")}</strong>
+            </p>
+            {isAdmin && (
+              <button
+                onClick={() => deleteTraining(selectedTraining.id)}
+                className="text-sm text-red-300 hover:text-red-200"
+              >
+                Apagar treino
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Players + Generate Teams */}
         {selectedTraining && (
