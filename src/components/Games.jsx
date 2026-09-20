@@ -1,14 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import { calculateTeamRanking } from "../utils/teamRanking";
 import { useAuth } from "../useAuth";
+import { getGameEndAction, getWinnerTeamNumber } from "../utils/gameLogic";
+
+const COLORS = {
+  black: { bg: "#000000", text: "white", name: "Preto" },
+  white: { bg: "#ffffff", text: "black", name: "Branco" },
+  yellow: { bg: "#ffff00", text: "black", name: "Amarelo" },
+};
+
+const TEAM_COLOR = { 1: "yellow", 2: "black", 3: "white" };
+
+const getTeamStyle = (teamNumber) =>
+  COLORS[TEAM_COLOR[Number(teamNumber)] || "black"];
+
+const rosterKey = (players = []) => [...players].map(String).sort().join("|");
 
 export default function Games() {
   const { isAdmin } = useAuth();
   const [selectedTraining, setSelectedTraining] = useState(null);
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
-  const [teamColors, setTeamColors] = useState({});
   const [timer, setTimer] = useState(300); // default 5 minutes
   const [durationChoice, setDurationChoice] = useState(300);
   const [running, setRunning] = useState(false);
@@ -16,14 +29,13 @@ export default function Games() {
   const [team2Score, setTeam2Score] = useState(0);
   const [showPlayers, setShowPlayers] = useState({});
   const [allPlayers, setAllPlayers] = useState([]);
-  const [teamWins, setTeamWins] = useState({});
+  const [teamStandings, setTeamStandings] = useState([]);
+  const [lastGame, setLastGame] = useState(null);
+  const [gameNotice, setGameNotice] = useState("");
+  const [savingGame, setSavingGame] = useState(false);
   const hornRef = useRef(null);
-
-  const COLORS = {
-    black: { bg: "#000000", text: "white" },
-    white: { bg: "#ffffff", text: "black" },
-    yellow: { bg: "#ffff00", text: "black" },
-  };
+  const saveGameRef = useRef(null);
+  const autoSaveHandledRef = useRef(false);
 
   // Load trainings and players
   useEffect(() => {
@@ -40,15 +52,7 @@ export default function Games() {
     fetchAllPlayers();
   }, []);
 
-  // Load teams and win stats
-  useEffect(() => {
-    if (selectedTraining) {
-      fetchTeams(selectedTraining.id);
-      fetchTeamWins(selectedTraining.id);
-    }
-  }, [selectedTraining]);
-
-  const fetchTeams = async (trainingId) => {
+  const fetchTeams = useCallback(async (trainingId) => {
     const { data, error } = await supabase
       .from("training_teams")
       .select("*")
@@ -57,13 +61,10 @@ export default function Games() {
 
     if (!error) {
       setTeams(data || []);
-      const defaults = {};
-      (data || []).forEach((t) => {
-        defaults[t.team_number] = "black";
-      });
-      setTeamColors(defaults);
+      return data || [];
     }
-  };
+    return [];
+  }, []);
 
   const fetchAllPlayers = async () => {
     const { data, error } = await supabase.from("players").select("id, name");
@@ -75,27 +76,53 @@ export default function Games() {
     return player ? player.name : id;
   };
 
-  const fetchTeamWins = async (trainingId) => {
+  const fetchGameSummary = useCallback(async (trainingId, currentTeams) => {
     const { data, error } = await supabase
       .from("games")
-      .select("winner")
-      .eq("training_id", trainingId);
+      .select("id, team1, team2, team1_score, team2_score, winner, created_at")
+      .eq("training_id", trainingId)
+      .order("created_at", { ascending: true });
     if (error) return;
-    const wins = {};
-    for (const g of data) {
-      if (g.winner != null) {
-        wins[g.winner] = (wins[g.winner] || 0) + 1;
-      }
+
+    setTeamStandings(calculateTeamRanking(currentTeams, data || []));
+
+    if (!data?.length) {
+      setLastGame(null);
+      return;
     }
-    setTeamWins(wins);
-  };
+
+    const teamByRoster = new Map(
+      currentTeams.map((team) => [rosterKey(team.players), team.team_number]),
+    );
+    const latest = data[data.length - 1];
+    setLastGame({
+      team1: teamByRoster.get(rosterKey(latest.team1)) ?? "?",
+      team2: teamByRoster.get(rosterKey(latest.team2)) ?? "?",
+      team1Score: latest.team1_score,
+      team2Score: latest.team2_score,
+    });
+  }, []);
+
+  // Load teams, standings and the previous result
+  useEffect(() => {
+    if (selectedTraining) {
+      const loadTrainingGames = async () => {
+        const loadedTeams = await fetchTeams(selectedTraining.id);
+        await fetchGameSummary(selectedTraining.id, loadedTeams);
+      };
+
+      setSelectedTeams([]);
+      setGameNotice("");
+      loadTrainingGames();
+    }
+  }, [selectedTraining, fetchTeams, fetchGameSummary]);
 
   // Timer logic
   useEffect(() => {
     let interval;
     if (running && timer > 0) {
       interval = setInterval(() => setTimer((t) => t - 1), 1000);
-    } else if (timer === 0) {
+    } else if (timer === 0 && running) {
       setRunning(false);
       if (hornRef.current) {
         hornRef.current.currentTime = 0;
@@ -103,9 +130,26 @@ export default function Games() {
           console.warn("⚠️ Horn blocked until user interaction.");
         });
       }
+
+      const action = getGameEndAction({
+        timer,
+        running,
+        selectedTeamCount: selectedTeams.length,
+        team1Score,
+        team2Score,
+      });
+
+      if (action === "free-throws") {
+        setGameNotice("🏀 Empate: decide o jogo nos lances livres, atualiza o resultado final e guarda manualmente.");
+      } else if (action === "missing-teams") {
+        setGameNotice("⚠️ O tempo terminou, mas não foi possível guardar sem duas equipas selecionadas.");
+      } else if (action === "auto-save" && !autoSaveHandledRef.current) {
+        autoSaveHandledRef.current = true;
+        saveGameRef.current?.({ automatic: true });
+      }
     }
     return () => clearInterval(interval);
-  }, [running, timer]);
+  }, [running, timer, selectedTeams.length, team1Score, team2Score]);
 
   const toggleTeamSelection = (team) => {
     if (selectedTeams.some((t) => t.id === team.id)) {
@@ -122,16 +166,21 @@ export default function Games() {
     setTeam1Score(0);
     setTeam2Score(0);
     setRunning(false);
+    setGameNotice("");
+    autoSaveHandledRef.current = false;
   };
 
-  const saveGame = async () => {
+  const saveGame = async ({ automatic = false } = {}) => {
     if (selectedTeams.length !== 2 || !selectedTraining) return;
+    if (savingGame) return;
 
-    const winner =
-      team1Score > team2Score
-        ? selectedTeams[0].team_number
-        : selectedTeams[1].team_number;
+    const winner = getWinnerTeamNumber(selectedTeams, team1Score, team2Score);
+    if (winner == null) {
+      setGameNotice("🏀 O jogo está empatado. Introduz o resultado final dos lances livres antes de guardar.");
+      return;
+    }
 
+    setSavingGame(true);
     const { error } = await supabase.from("games").insert([
       {
         training_id: selectedTraining.id,
@@ -148,11 +197,14 @@ export default function Games() {
     if (error) {
       alert("❌ Erro ao guardar jogo: " + error.message);
     } else {
-      alert("✅ Jogo guardado!");
+      alert(automatic ? "✅ Tempo terminado: jogo guardado automaticamente!" : "✅ Jogo guardado!");
+      await fetchGameSummary(selectedTraining.id, teams);
       resetGame();
-      fetchTeamWins(selectedTraining.id);
     }
+    setSavingGame(false);
   };
+
+  saveGameRef.current = saveGame;
 
   const endTraining = async () => {
     if (!selectedTraining) return;
@@ -217,27 +269,42 @@ export default function Games() {
     <div className="p-6 max-w-6xl mx-auto bg-gray-900 text-white rounded-2xl shadow-lg">
       <h1 className="text-4xl font-bold mb-8 text-center">🎮 Jogos</h1>
 
-      {/* Wins summary */}
-      {Object.keys(teamWins).length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">📊 Vitórias até agora</h2>
-          <ul className="space-y-2">
-            {Object.entries(teamWins).map(([team, wins]) => (
-              <li key={team} className="p-3 bg-gray-800 rounded-lg">
-                Equipa {team}: <strong>{wins}</strong> vitória(s)
-              </li>
-            ))}
-          </ul>
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl bg-gray-800 p-4">
+          <h2 className="mb-3 text-xl font-bold">📊 Classificação</h2>
+          {teamStandings.length ? (
+            <ol className="space-y-2">
+              {teamStandings.map((team, index) => (
+                <li key={team.team_number} className="flex items-center justify-between rounded bg-gray-700 p-2">
+                  <span>{index + 1}.º Equipa {team.team_number}</span>
+                  <span><strong>{team.wins}</strong> V / <strong>{team.losses}</strong> D</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-gray-400">Ainda não existem equipas.</p>
+          )}
         </div>
-      )}
 
-      {/* Teams with color selector */}
+        <div className="rounded-xl bg-gray-800 p-4">
+          <h2 className="mb-3 text-xl font-bold">⏮️ Último jogo</h2>
+          {lastGame ? (
+            <div className="flex items-center justify-center gap-3 text-center">
+              <span className="font-semibold">Equipa {lastGame.team1}</span>
+              <strong className="text-2xl">{lastGame.team1Score} – {lastGame.team2Score}</strong>
+              <span className="font-semibold">Equipa {lastGame.team2}</span>
+            </div>
+          ) : (
+            <p className="text-gray-400">Ainda não existem jogos guardados.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Teams with fixed colours */}
       <h2 className="text-xl font-semibold mb-4">Escolhe 2 equipas:</h2>
       <div className="grid md:grid-cols-3 gap-4 mb-8">
         {teams.map((team) => {
-          const color = teamColors[team.team_number] || "black";
-          const bg = COLORS[color].bg;
-          const text = COLORS[color].text;
+          const style = getTeamStyle(team.team_number);
 
           return (
             <div
@@ -245,25 +312,10 @@ export default function Games() {
               className={`p-4 rounded-xl cursor-pointer transition ${
                 selectedTeams.some((t) => t.id === team.id) ? "ring-4 ring-green-500" : ""
               }`}
-              style={{ backgroundColor: bg, color: text }}
+              style={{ backgroundColor: style.bg, color: style.text }}
               onClick={() => toggleTeamSelection(team)}
             >
-              <h3 className="font-bold mb-2">Equipa {team.team_number}</h3>
-              <select
-                value={color}
-                onChange={(e) =>
-                  setTeamColors((prev) => ({
-                    ...prev,
-                    [team.team_number]: e.target.value,
-                  }))
-                }
-                className="px-2 py-1 mb-2 rounded text-black"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <option value="black">⚫ Preto</option>
-                <option value="white">⚪ Branco</option>
-                <option value="yellow">🟡 Amarelo</option>
-              </select>
+              <h3 className="font-bold mb-2">Equipa {team.team_number} · {style.name}</h3>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -313,29 +365,38 @@ export default function Games() {
             <div className="text-8xl md:text-9xl font-mono font-bold">
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, "0")}
             </div>
+            {gameNotice && (
+              <p className="mx-auto mt-4 max-w-2xl rounded-lg bg-orange-700 p-3 font-semibold">
+                {gameNotice}
+              </p>
+            )}
             <div className="flex justify-center gap-4 mt-6">
-              {!running ? (
+              {!running && timer > 0 ? (
                 <button onClick={() => setRunning(true)} className="bg-green-600 px-6 py-3 text-xl rounded">▶️ Start</button>
-              ) : (
+              ) : running ? (
                 <button onClick={() => setRunning(false)} className="bg-yellow-600 px-6 py-3 text-xl rounded">⏸ Pause</button>
-              )}
+              ) : null}
               <button onClick={resetGame} className="bg-gray-600 px-6 py-3 text-xl rounded">🔄 Reset</button>
               {isAdmin && (
-                <button onClick={saveGame} className="bg-blue-600 px-6 py-3 text-xl rounded">💾 Guardar</button>
+                <button
+                  onClick={() => saveGame()}
+                  disabled={savingGame}
+                  className="bg-blue-600 px-6 py-3 text-xl rounded disabled:opacity-50"
+                >
+                  {savingGame ? "A guardar…" : "💾 Guardar"}
+                </button>
               )}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-8 mb-10 text-center">
             {selectedTeams.map((team, idx) => {
-              const color = teamColors[team.team_number] || "black";
-              const bg = COLORS[color].bg;
-              const text = COLORS[color].text;
+              const style = getTeamStyle(team.team_number);
               const score = idx === 0 ? team1Score : team2Score;
               const setScore = idx === 0 ? setTeam1Score : setTeam2Score;
 
               return (
-                <div key={idx} className="p-6 rounded-2xl shadow-lg" style={{ backgroundColor: bg, color: text }}>
+                <div key={idx} className="p-6 rounded-2xl shadow-lg" style={{ backgroundColor: style.bg, color: style.text }}>
                   <h2 className="text-3xl font-bold mb-4">Equipa {team.team_number}</h2>
                   <p className="text-8xl font-extrabold mb-6">{score}</p>
                   <div className="flex gap-4 justify-center">
