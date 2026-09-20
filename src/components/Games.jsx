@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabaseClient";
+import { calculateTeamRanking } from "../utils/teamRanking";
+import { useAuth } from "../useAuth";
 
 export default function Games() {
-  const [trainings, setTrainings] = useState([]);
+  const { isAdmin } = useAuth();
   const [selectedTraining, setSelectedTraining] = useState(null);
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
@@ -29,9 +31,8 @@ export default function Games() {
       const { data, error } = await supabase
         .from("trainings")
         .select("*")
-        .order("date", { ascending: false });
+      .order("date", { ascending: false });
       if (!error && data.length > 0) {
-        setTrainings(data);
         setSelectedTraining(data[0]);
       }
     };
@@ -171,12 +172,9 @@ export default function Games() {
       return;
     }
 
-    const winsMap = {};
-    for (const t of allTeams) winsMap[t.team_number] = 0;
-
     const { data: games, error: gamesErr } = await supabase
       .from("games")
-      .select("winner")
+      .select("team1, team2, team1_score, team2_score, winner")
       .eq("training_id", selectedTraining.id);
 
     if (gamesErr) {
@@ -184,19 +182,7 @@ export default function Games() {
       return;
     }
 
-    for (const g of (games || [])) {
-      if (g?.winner != null && winsMap[g.winner] != null) {
-        winsMap[g.winner] += 1;
-      }
-    }
-
-    const ranking = allTeams
-      .map((t) => ({
-        team_number: t.team_number,
-        players: t.players || [],
-        wins: winsMap[t.team_number] || 0,
-      }))
-      .sort((a, b) => b.wins - a.wins);
+    const ranking = calculateTeamRanking(allTeams, games);
 
     const places = Math.min(ranking.length, 3);
     const pointsByPlace = places === 2 ? [3, 2] : [3, 2, 1];
@@ -334,7 +320,9 @@ export default function Games() {
                 <button onClick={() => setRunning(false)} className="bg-yellow-600 px-6 py-3 text-xl rounded">⏸ Pause</button>
               )}
               <button onClick={resetGame} className="bg-gray-600 px-6 py-3 text-xl rounded">🔄 Reset</button>
-              <button onClick={saveGame} className="bg-blue-600 px-6 py-3 text-xl rounded">💾 Guardar</button>
+              {isAdmin && (
+                <button onClick={saveGame} className="bg-blue-600 px-6 py-3 text-xl rounded">💾 Guardar</button>
+              )}
             </div>
           </div>
 
@@ -360,14 +348,14 @@ export default function Games() {
           </div>
 
           {/* Finish training */}
-          <div className="text-center mt-8">
+          {isAdmin && <div className="text-center mt-8">
             <button
               onClick={endTraining}
               className="bg-purple-600 hover:bg-purple-700 px-6 py-3 text-xl rounded"
             >
               🏁 Finalizar Treino
             </button>
-          </div>
+          </div>}
         </>
       )}
       <audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />

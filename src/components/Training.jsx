@@ -1,7 +1,7 @@
-  import { useState, useEffect } from "react";
+  import { useState, useEffect, useCallback } from "react";
   import { supabase } from "../supabaseClient";
-
-  const ADMIN_PASS = "treino123";
+  import { createBalancedTeams, getTeamAverage } from "../utils/teamGenerator";
+  import { useAuth } from "../useAuth";
 
   export default function Training() {
     const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -11,13 +11,23 @@
     const [selectedTraining, setSelectedTraining] = useState(null);
     const [error, setError] = useState(null);
 
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [passInput, setPassInput] = useState("");
+    const { isAdmin } = useAuth();
 
     // Teams held as arrays of FULL player objects [{id,name,total_points,...}]
     const [teams, setTeams] = useState([]);
     const [choice12, setChoice12] = useState(""); // "2" or "3" for 12–14 players
     const [editMode, setEditMode] = useState(false);
+
+    const loadTeams = useCallback(async (trainingId) => {
+      const { data, error } = await supabase.from("training_teams").select("*").eq("training_id", trainingId).order("team_number");
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      const toObj = (id) => players.find((p) => p.id === id);
+      const hydrated = (data || []).map((row) => (row.players || []).map(toObj).filter(Boolean)) || [];
+      setTeams(hydrated);
+    }, [players]);
 
     useEffect(() => {
       fetchPlayers();
@@ -29,7 +39,7 @@
         loadTeams(selectedTraining.id);
         fetchAttendance(selectedTraining.id);
       }
-    }, [selectedTraining, players]);
+    }, [selectedTraining, players, loadTeams]);
 
     const fetchPlayers = async () => {
       const { data, error } = await supabase.from("players").select("*").order("name");
@@ -42,16 +52,6 @@
       if (error) setError(error.message);
       else setTrainings(data || []);
     };
-
-    const shuffleArray = (arr) => {
-    const copy = [...arr];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  };
-
 
     const createTraining = async () => {
       const { data, error } = await supabase.from("trainings").insert([{ date }]).select().single();
@@ -75,7 +75,9 @@
         }
         try {
           await supabase.rpc("recalculate_all_player_stats");
-        } catch {}
+        } catch {
+          // The training is still deleted if the optional stats refresh fails.
+        }
       }
     };
 
@@ -132,71 +134,6 @@
 
 
 
-    const checkPassword = () => {
-      if (passInput === ADMIN_PASS) {
-        setIsAdmin(true);
-        setPassInput("");
-      } else {
-        alert("❌ Wrong password");
-      }
-    };
-
-    const loadTeams = async (trainingId) => {
-      const { data, error } = await supabase.from("training_teams").select("*").eq("training_id", trainingId).order("team_number");
-      if (error) {
-        setError(error.message);
-        return;
-      }
-      const toObj = (id) => players.find((p) => p.id === id);
-      const hydrated = (data || []).map((row) => (row.players || []).map(toObj).filter(Boolean)) || [];
-      setTeams(hydrated);
-    };
-
-  const generateBalancedTeams = (list) => {
-    // Group by total_points
-    const groups = {};
-    for (const p of list) {
-      const pts = p.total_points || 0;
-      if (!groups[pts]) groups[pts] = [];
-      groups[pts].push(p);
-    }
-
-    // Sort groups by points (high → low) and shuffle inside
-    const sortedGroups = Object.entries(groups)
-      .sort((a, b) => b[0] - a[0])
-      .map(([_, players]) => shuffleArray(players));
-
-    // Flatten back to list
-    const sorted = sortedGroups.flat();
-
-    const n = sorted.length;
-    let numTeams;
-    if (n <= 11) numTeams = 2;
-    else if (n >= 12 && n <= 14) {
-      if (!choice12) {
-        alert("⚠️ Escolhe 2 ou 3 equipas antes de gerar!");
-        return [];
-      }
-      numTeams = parseInt(choice12, 10);
-    } else numTeams = 3;
-
-    const result = Array.from({ length: numTeams }, () => []);
-    let idx = 0, dir = 1;
-    for (const p of sorted) {
-      result[idx].push(p);
-      idx += dir;
-      if (idx === numTeams) {
-        idx = numTeams - 1;
-        dir = -1;
-      } else if (idx < 0) {
-        idx = 0;
-        dir = 1;
-      }
-    }
-    return result;
-  };
-
-
     const generateTeams = async () => {
       if (!selectedTraining) {
         alert("⚠️ Cria primeiro um treino.");
@@ -214,7 +151,13 @@
         return;
       }
 
-      const newTeams = generateBalancedTeams(selectedPlayers);
+      const numberOfTeams =
+        selectedPlayers.length <= 11
+          ? 2
+          : selectedPlayers.length <= 14
+            ? parseInt(choice12, 10)
+            : 3;
+      const newTeams = createBalancedTeams(selectedPlayers, numberOfTeams);
       if (!newTeams || newTeams.length === 0) return;
 
       setTeams(newTeams);
@@ -289,18 +232,20 @@
         {error && <p className="text-red-400 mb-4">{error}</p>}
 
         {/* Create new training */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-2 items-center justify-center">
-          <label className="font-semibold">Data:</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="px-3 py-2 rounded bg-gray-700 border border-gray-600 text-white"
-          />
-          <button onClick={createTraining} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full sm:w-auto">
-            Criar treino
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="mb-6 flex flex-col sm:flex-row gap-2 items-center justify-center">
+            <label className="font-semibold">Data:</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="px-3 py-2 rounded bg-gray-700 border border-gray-600 text-white"
+            />
+            <button onClick={createTraining} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full sm:w-auto">
+              Criar treino
+            </button>
+          </div>
+        )}
 
         {/* Trainings list */}
         <h2 className="text-xl font-semibold mb-2">📅 Treinos Anteriores</h2>
@@ -431,7 +376,10 @@
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {teams.map((team, idx) => (
                 <div key={idx} className="p-4 border rounded bg-gray-700 shadow-sm">
-                  <h3 className="font-bold mb-2 text-blue-300">Equipa {idx + 1}</h3>
+                  <h3 className="font-bold text-blue-300">Equipa {idx + 1}</h3>
+                  <p className="mb-2 text-sm text-gray-300">
+                    Média: {getTeamAverage(team).toFixed(2)}
+                  </p>
                   <ul className="space-y-2">
                     {team.map((p) => (
                       <li key={p.id} className="flex items-center justify-between gap-2 bg-gray-800 px-2 py-2 rounded">
@@ -494,23 +442,6 @@
           </div>
         )}
 
-        {!isAdmin && (
-          <div className="mt-6 p-4 border rounded bg-gray-700">
-            <h2 className="font-semibold mb-2">🔒 Admin login</h2>
-            <div className="flex gap-2 flex-col sm:flex-row">
-              <input
-                type="password"
-                placeholder="Password"
-                className="border px-3 py-2 flex-1 rounded bg-gray-600 text-white"
-                value={passInput}
-                onChange={(e) => setPassInput(e.target.value)}
-              />
-              <button onClick={checkPassword} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full sm:w-auto">
-                Login
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }

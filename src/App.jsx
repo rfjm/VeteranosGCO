@@ -5,18 +5,22 @@ import Players from "./components/Players";
 import Training from "./components/Training";
 import Leaderboard from "./components/Leaderboard";
 import Games from "./components/Games";
+import AuthProvider from "./AuthProvider";
 
 export default function App() {
   return (
-  <BrowserRouter basename="/VeteranosGCO">      <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/players" element={<Players />} />
-          <Route path="/training" element={<Training />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/games" element={<Games />} />
-        </Routes>
-      </Layout>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter basename="/VeteranosGCO">
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/players" element={<Players />} />
+            <Route path="/training" element={<Training />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/games" element={<Games />} />
+          </Routes>
+        </Layout>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
