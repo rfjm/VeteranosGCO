@@ -7,6 +7,7 @@ import {
   getGameEndAction,
   getNextTeamPair,
   getRecentGameResults,
+  getStoredDurationMinutes,
   getWinnerTeamNumber,
 } from "../utils/gameLogic";
 
@@ -235,7 +236,9 @@ export default function Games() {
         team2_score: team2Score,
         winner,
         date: selectedTraining.date,
-        duration_minutes: durationChoice / 60,
+        // Supabase stores this legacy field as an integer. The timer itself
+        // still supports exact seconds from 0:00 through 30:00.
+        duration_minutes: getStoredDurationMinutes(durationChoice),
       },
     ]);
 

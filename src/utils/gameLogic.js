@@ -31,6 +31,13 @@ export const clampGameDuration = (minutes, seconds) => {
   return Math.min(30 * 60, safeMinutes * 60 + safeSeconds);
 };
 
+export const getStoredDurationMinutes = (durationSeconds) => {
+  const parsedSeconds = Number(durationSeconds);
+  if (!Number.isFinite(parsedSeconds)) return 0;
+
+  return Math.floor(Math.min(30 * 60, Math.max(0, parsedSeconds)) / 60);
+};
+
 const rosterKey = (players = []) => [...players].map(String).sort().join("|");
 
 export const getRecentGameResults = (games, teams, limit = 3) => {

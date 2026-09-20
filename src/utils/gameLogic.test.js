@@ -5,6 +5,7 @@ import {
   getGameEndAction,
   getNextTeamPair,
   getRecentGameResults,
+  getStoredDurationMinutes,
   getWinnerTeamNumber,
 } from "./gameLogic.js";
 
@@ -14,6 +15,12 @@ test("clamps custom game durations between zero and thirty minutes", () => {
   assert.equal(clampGameDuration(29, 59), 1799);
   assert.equal(clampGameDuration(30, 45), 1800);
   assert.equal(clampGameDuration(-2, -10), 0);
+});
+
+test("stores custom durations as whole minutes for the integer database column", () => {
+  assert.equal(getStoredDurationMinutes(10), 0);
+  assert.equal(getStoredDurationMinutes(5 * 60 + 30), 5);
+  assert.equal(getStoredDurationMinutes(30 * 60), 30);
 });
 
 test("automatically saves a finished game with a winner", () => {
