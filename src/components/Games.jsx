@@ -2,7 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import { calculateTeamRanking } from "../utils/teamRanking";
 import { useAuth } from "../useAuth";
-import { getGameEndAction, getWinnerTeamNumber } from "../utils/gameLogic";
+import {
+  getGameEndAction,
+  getRecentGameResults,
+  getWinnerTeamNumber,
+} from "../utils/gameLogic";
 
 const COLORS = {
   black: { bg: "#000000", text: "white", name: "Preto" },
@@ -14,8 +18,6 @@ const TEAM_COLOR = { 1: "yellow", 2: "black", 3: "white" };
 
 const getTeamStyle = (teamNumber) =>
   COLORS[TEAM_COLOR[Number(teamNumber)] || "black"];
-
-const rosterKey = (players = []) => [...players].map(String).sort().join("|");
 
 export default function Games() {
   const { isAdmin } = useAuth();
@@ -30,10 +32,11 @@ export default function Games() {
   const [showPlayers, setShowPlayers] = useState({});
   const [allPlayers, setAllPlayers] = useState([]);
   const [teamStandings, setTeamStandings] = useState([]);
-  const [lastGame, setLastGame] = useState(null);
+  const [recentGames, setRecentGames] = useState([]);
   const [gameNotice, setGameNotice] = useState("");
   const [savingGame, setSavingGame] = useState(false);
   const hornRef = useRef(null);
+  const scoreboardRef = useRef(null);
   const saveGameRef = useRef(null);
   const autoSaveHandledRef = useRef(false);
 
@@ -87,20 +90,11 @@ export default function Games() {
     setTeamStandings(calculateTeamRanking(currentTeams, data || []));
 
     if (!data?.length) {
-      setLastGame(null);
+      setRecentGames([]);
       return;
     }
 
-    const teamByRoster = new Map(
-      currentTeams.map((team) => [rosterKey(team.players), team.team_number]),
-    );
-    const latest = data[data.length - 1];
-    setLastGame({
-      team1: teamByRoster.get(rosterKey(latest.team1)) ?? "?",
-      team2: teamByRoster.get(rosterKey(latest.team2)) ?? "?",
-      team1Score: latest.team1_score,
-      team2Score: latest.team2_score,
-    });
+    setRecentGames(getRecentGameResults(data, currentTeams));
   }, []);
 
   // Load teams, standings and the previous result
@@ -168,6 +162,15 @@ export default function Games() {
     setRunning(false);
     setGameNotice("");
     autoSaveHandledRef.current = false;
+  };
+
+  const enterScoreboardFullscreen = async () => {
+    scoreboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      await scoreboardRef.current?.requestFullscreen?.();
+    } catch {
+      // Scrolling still provides the large scoreboard when fullscreen is unavailable.
+    }
   };
 
   const saveGame = async ({ automatic = false } = {}) => {
@@ -287,13 +290,22 @@ export default function Games() {
         </div>
 
         <div className="rounded-xl bg-gray-800 p-4">
-          <h2 className="mb-3 text-xl font-bold">⏮️ Último jogo</h2>
-          {lastGame ? (
-            <div className="flex items-center justify-center gap-3 text-center">
-              <span className="font-semibold">Equipa {lastGame.team1}</span>
-              <strong className="text-2xl">{lastGame.team1Score} – {lastGame.team2Score}</strong>
-              <span className="font-semibold">Equipa {lastGame.team2}</span>
-            </div>
+          <h2 className="mb-3 text-xl font-bold">⏮️ Últimos 3 jogos</h2>
+          {recentGames.length ? (
+            <ol className="space-y-2">
+              {recentGames.map((game, index) => (
+                <li
+                  key={game.id}
+                  className={`flex items-center justify-center gap-3 rounded p-2 text-center ${
+                    index === 0 ? "bg-gray-700" : "bg-gray-900"
+                  }`}
+                >
+                  <span className="font-semibold">Equipa {game.team1}</span>
+                  <strong className="text-xl">{game.team1Score} – {game.team2Score}</strong>
+                  <span className="font-semibold">Equipa {game.team2}</span>
+                </li>
+              ))}
+            </ol>
           ) : (
             <p className="text-gray-400">Ainda não existem jogos guardados.</p>
           )}
@@ -342,71 +354,89 @@ export default function Games() {
       {/* Timer + Scoreboard */}
       {selectedTeams.length === 2 && (
         <>
-          {/* Time Selector */}
-          <div className="flex items-center justify-center mb-6">
-            <label className="mr-3 text-lg">⏱️ Duração:</label>
-            <select
-              value={durationChoice}
-              onChange={(e) => {
-                const newDuration = parseInt(e.target.value, 10);
-                setDurationChoice(newDuration);
-                setTimer(newDuration);
-              }}
-              className="text-black px-3 py-2 rounded"
-            >
-              <option value={300}>5 minutos</option>
-              <option value={600}>10 minutos</option>
-              <option value={360}>6 minutos</option>
-              <option value={720}>12 minutos</option>
-            </select>
-          </div>
+          <section
+            ref={scoreboardRef}
+            className="flex min-h-[100svh] scroll-mt-2 flex-col overflow-hidden rounded-2xl bg-gray-950 p-2 text-center sm:p-4"
+          >
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+              <label className="text-sm sm:text-base">⏱️ Duração:</label>
+              <select
+                value={durationChoice}
+                disabled={running}
+                onChange={(e) => {
+                  const newDuration = parseInt(e.target.value, 10);
+                  setDurationChoice(newDuration);
+                  setTimer(newDuration);
+                }}
+                className="rounded px-2 py-1 text-black disabled:opacity-50"
+              >
+                <option value={300}>5 minutos</option>
+                <option value={600}>10 minutos</option>
+                <option value={360}>6 minutos</option>
+                <option value={720}>12 minutos</option>
+              </select>
+              <button
+                type="button"
+                onClick={enterScoreboardFullscreen}
+                className="rounded bg-gray-700 px-3 py-1 hover:bg-gray-600"
+              >
+                ⛶ Ecrã inteiro
+              </button>
+            </div>
 
-          <div className="text-center mb-10">
-            <div className="text-8xl md:text-9xl font-mono font-bold">
+            <div className="font-mono text-[clamp(5rem,20vh,12rem)] font-black leading-none tracking-tight">
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, "0")}
             </div>
             {gameNotice && (
-              <p className="mx-auto mt-4 max-w-2xl rounded-lg bg-orange-700 p-3 font-semibold">
+              <p className="mx-auto max-w-3xl rounded-lg bg-orange-700 p-2 font-semibold sm:p-3">
                 {gameNotice}
               </p>
             )}
-            <div className="flex justify-center gap-4 mt-6">
+            <div className="my-2 flex flex-wrap justify-center gap-2 sm:gap-4">
               {!running && timer > 0 ? (
-                <button onClick={() => setRunning(true)} className="bg-green-600 px-6 py-3 text-xl rounded">▶️ Start</button>
+                <button onClick={() => setRunning(true)} className="rounded bg-green-600 px-5 py-2 text-lg sm:text-xl">▶️ Start</button>
               ) : running ? (
-                <button onClick={() => setRunning(false)} className="bg-yellow-600 px-6 py-3 text-xl rounded">⏸ Pause</button>
+                <button onClick={() => setRunning(false)} className="rounded bg-yellow-600 px-5 py-2 text-lg sm:text-xl">⏸ Pause</button>
               ) : null}
-              <button onClick={resetGame} className="bg-gray-600 px-6 py-3 text-xl rounded">🔄 Reset</button>
+              <button onClick={resetGame} className="rounded bg-gray-600 px-5 py-2 text-lg sm:text-xl">🔄 Reset</button>
               {isAdmin && (
                 <button
                   onClick={() => saveGame()}
                   disabled={savingGame}
-                  className="bg-blue-600 px-6 py-3 text-xl rounded disabled:opacity-50"
+                  className="rounded bg-blue-600 px-5 py-2 text-lg disabled:opacity-50 sm:text-xl"
                 >
                   {savingGame ? "A guardar…" : "💾 Guardar"}
                 </button>
               )}
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-8 mb-10 text-center">
-            {selectedTeams.map((team, idx) => {
-              const style = getTeamStyle(team.team_number);
-              const score = idx === 0 ? team1Score : team2Score;
-              const setScore = idx === 0 ? setTeam1Score : setTeam2Score;
+            <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-4">
+              {selectedTeams.map((team, idx) => {
+                const style = getTeamStyle(team.team_number);
+                const score = idx === 0 ? team1Score : team2Score;
+                const setScore = idx === 0 ? setTeam1Score : setTeam2Score;
 
-              return (
-                <div key={idx} className="p-6 rounded-2xl shadow-lg" style={{ backgroundColor: style.bg, color: style.text }}>
-                  <h2 className="text-3xl font-bold mb-4">Equipa {team.team_number}</h2>
-                  <p className="text-8xl font-extrabold mb-6">{score}</p>
-                  <div className="flex gap-4 justify-center">
-                    <button onClick={() => setScore((s) => s + 1)} className="bg-green-600 px-4 py-2 rounded text-xl">+1</button>
-                    <button onClick={() => setScore((s) => Math.max(0, s - 1))} className="bg-red-600 px-4 py-2 rounded text-xl">-1</button>
+                return (
+                  <div
+                    key={team.id}
+                    className="flex min-h-0 flex-col justify-between rounded-2xl p-2 shadow-lg sm:p-4"
+                    style={{ backgroundColor: style.bg, color: style.text }}
+                  >
+                    <h2 className="text-[clamp(1.5rem,4vw,3.5rem)] font-black leading-none">
+                      Equipa {team.team_number}
+                    </h2>
+                    <p className="flex flex-1 items-center justify-center text-[clamp(8rem,30vh,20rem)] font-black leading-none tracking-tighter">
+                      {score}
+                    </p>
+                    <div className="flex justify-center gap-2 sm:gap-4">
+                      <button onClick={() => setScore((s) => s + 1)} className="rounded bg-green-600 px-5 py-2 text-2xl font-bold sm:px-8 sm:py-3">+1</button>
+                      <button onClick={() => setScore((s) => Math.max(0, s - 1))} className="rounded bg-red-600 px-5 py-2 text-2xl font-bold sm:px-8 sm:py-3">-1</button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </section>
 
           {/* Finish training */}
           {isAdmin && <div className="text-center mt-8">
