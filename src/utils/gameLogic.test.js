@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getGameEndAction,
+  getNextTeamPair,
   getRecentGameResults,
   getWinnerTeamNumber,
 } from "./gameLogic.js";
@@ -71,4 +72,31 @@ test("returns the three most recent results with team numbers", () => {
     { id: 3, team1: 2, team2: 3, team1Score: 9, team2Score: 6 },
     { id: 2, team1: 3, team2: 1, team1Score: 7, team2Score: 8 },
   ]);
+});
+
+test("advances matchups through the fixed three-team sequence", () => {
+  const teams = [
+    { team_number: 1 },
+    { team_number: 2 },
+    { team_number: 3 },
+  ];
+
+  assert.deepEqual(
+    getNextTeamPair([teams[0], teams[1]], teams).map((team) => team.team_number),
+    [1, 3],
+  );
+  assert.deepEqual(
+    getNextTeamPair([teams[2], teams[0]], teams).map((team) => team.team_number),
+    [2, 3],
+  );
+  assert.deepEqual(
+    getNextTeamPair([teams[1], teams[2]], teams).map((team) => team.team_number),
+    [1, 2],
+  );
+});
+
+test("keeps the same matchup when only two teams exist", () => {
+  const teams = [{ team_number: 1 }, { team_number: 2 }];
+
+  assert.equal(getNextTeamPair(teams, teams), teams);
 });

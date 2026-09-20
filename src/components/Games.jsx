@@ -4,6 +4,7 @@ import { calculateTeamRanking } from "../utils/teamRanking";
 import { useAuth } from "../useAuth";
 import {
   getGameEndAction,
+  getNextTeamPair,
   getRecentGameResults,
   getWinnerTeamNumber,
 } from "../utils/gameLogic";
@@ -11,7 +12,12 @@ import {
 const COLORS = {
   black: { bg: "#000000", text: "white", name: "Preto" },
   white: { bg: "#ffffff", text: "black", name: "Branco" },
-  yellow: { bg: "#ffff00", text: "black", name: "Amarelo" },
+  yellow: {
+    bg: "#f5ff00",
+    text: "black",
+    name: "Amarelo",
+    shadow: "0 0 28px rgba(245, 255, 0, 0.5)",
+  },
 };
 
 const TEAM_COLOR = { 1: "yellow", 2: "black", 3: "white" };
@@ -35,10 +41,26 @@ export default function Games() {
   const [recentGames, setRecentGames] = useState([]);
   const [gameNotice, setGameNotice] = useState("");
   const [savingGame, setSavingGame] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const hornRef = useRef(null);
   const scoreboardRef = useRef(null);
   const saveGameRef = useRef(null);
   const autoSaveHandledRef = useRef(false);
+
+  useEffect(() => {
+    const updateFullscreenState = () => {
+      const fullscreenElement =
+        document.fullscreenElement || document.webkitFullscreenElement;
+      setIsFullscreen(fullscreenElement === scoreboardRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener("webkitfullscreenchange", updateFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", updateFullscreenState);
+    };
+  }, []);
 
   // Load trainings and players
   useEffect(() => {
@@ -164,10 +186,21 @@ export default function Games() {
     autoSaveHandledRef.current = false;
   };
 
-  const enterScoreboardFullscreen = async () => {
-    scoreboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const toggleScoreboardFullscreen = async () => {
+    const fullscreenElement =
+      document.fullscreenElement || document.webkitFullscreenElement;
+
     try {
-      await scoreboardRef.current?.requestFullscreen?.();
+      if (fullscreenElement) {
+        const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+        await exitFullscreen?.call(document);
+      } else {
+        scoreboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const requestFullscreen =
+          scoreboardRef.current?.requestFullscreen ||
+          scoreboardRef.current?.webkitRequestFullscreen;
+        await requestFullscreen?.call(scoreboardRef.current);
+      }
     } catch {
       // Scrolling still provides the large scoreboard when fullscreen is unavailable.
     }
@@ -200,9 +233,14 @@ export default function Games() {
     if (error) {
       alert("❌ Erro ao guardar jogo: " + error.message);
     } else {
+      const nextTeams = getNextTeamPair(selectedTeams, teams);
       alert(automatic ? "✅ Tempo terminado: jogo guardado automaticamente!" : "✅ Jogo guardado!");
       await fetchGameSummary(selectedTraining.id, teams);
       resetGame();
+      setSelectedTeams(nextTeams);
+      setGameNotice(
+        `Próximo jogo: Equipa ${nextTeams[0].team_number} vs Equipa ${nextTeams[1].team_number}`,
+      );
     }
     setSavingGame(false);
   };
@@ -324,7 +362,7 @@ export default function Games() {
               className={`p-4 rounded-xl cursor-pointer transition ${
                 selectedTeams.some((t) => t.id === team.id) ? "ring-4 ring-green-500" : ""
               }`}
-              style={{ backgroundColor: style.bg, color: style.text }}
+              style={{ backgroundColor: style.bg, color: style.text, boxShadow: style.shadow }}
               onClick={() => toggleTeamSelection(team)}
             >
               <h3 className="font-bold mb-2">Equipa {team.team_number} · {style.name}</h3>
@@ -377,10 +415,10 @@ export default function Games() {
               </select>
               <button
                 type="button"
-                onClick={enterScoreboardFullscreen}
+                onClick={toggleScoreboardFullscreen}
                 className="rounded bg-gray-700 px-3 py-1 hover:bg-gray-600"
               >
-                ⛶ Ecrã inteiro
+                {isFullscreen ? "⛶ Sair do ecrã inteiro" : "⛶ Ecrã inteiro"}
               </button>
             </div>
 
@@ -420,7 +458,7 @@ export default function Games() {
                   <div
                     key={team.id}
                     className="flex min-h-0 flex-col justify-between rounded-2xl p-2 shadow-lg sm:p-4"
-                    style={{ backgroundColor: style.bg, color: style.text }}
+                    style={{ backgroundColor: style.bg, color: style.text, boxShadow: style.shadow }}
                   >
                     <h2 className="text-[clamp(1.5rem,4vw,3.5rem)] font-black leading-none">
                       Equipa {team.team_number}
