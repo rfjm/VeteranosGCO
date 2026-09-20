@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import Layout from "./Layout";
 import Home from "./components/Home";
 import Players from "./components/Players";
@@ -10,7 +10,7 @@ import AuthProvider from "./AuthProvider";
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename="/VeteranosGCO">
+      <HashRouter>
         <Layout>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -20,7 +20,7 @@ export default function App() {
             <Route path="/games" element={<Games />} />
           </Routes>
         </Layout>
-      </BrowserRouter>
+      </HashRouter>
     </AuthProvider>
   );
 }
