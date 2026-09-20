@@ -18,6 +18,19 @@ export const getWinnerTeamNumber = (selectedTeams, team1Score, team2Score) => {
     : selectedTeams[1].team_number;
 };
 
+export const clampGameDuration = (minutes, seconds) => {
+  const parsedMinutes = Number(minutes);
+  const parsedSeconds = Number(seconds);
+  const safeMinutes = Number.isFinite(parsedMinutes)
+    ? Math.max(0, Math.floor(parsedMinutes))
+    : 0;
+  const safeSeconds = Number.isFinite(parsedSeconds)
+    ? Math.max(0, Math.floor(parsedSeconds))
+    : 0;
+
+  return Math.min(30 * 60, safeMinutes * 60 + safeSeconds);
+};
+
 const rosterKey = (players = []) => [...players].map(String).sort().join("|");
 
 export const getRecentGameResults = (games, teams, limit = 3) => {

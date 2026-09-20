@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 import { calculateTeamRanking } from "../utils/teamRanking";
 import { useAuth } from "../useAuth";
 import {
+  clampGameDuration,
   getGameEndAction,
   getNextTeamPair,
   getRecentGameResults,
@@ -186,6 +187,14 @@ export default function Games() {
     autoSaveHandledRef.current = false;
   };
 
+  const updateDuration = (minutes, seconds) => {
+    const newDuration = clampGameDuration(minutes, seconds);
+    setDurationChoice(newDuration);
+    setTimer(newDuration);
+    setGameNotice("");
+    autoSaveHandledRef.current = false;
+  };
+
   const toggleScoreboardFullscreen = async () => {
     const fullscreenElement =
       document.fullscreenElement || document.webkitFullscreenElement;
@@ -302,7 +311,19 @@ export default function Games() {
       }
     }
 
-    await supabase.from("training_teams").delete().eq("training_id", selectedTraining.id);
+    const { error: deleteError } = await supabase
+      .from("training_teams")
+      .delete()
+      .eq("training_id", selectedTraining.id);
+
+    if (deleteError) {
+      alert("Os pontos foram atribuídos, mas ocorreu um erro ao remover as equipas: " + deleteError.message);
+      return;
+    }
+
+    setTeams([]);
+    setSelectedTeams([]);
+    setTeamStandings([]);
     alert("✅ Pontos atribuídos e equipas removidas!");
   };
 
@@ -398,21 +419,30 @@ export default function Games() {
           >
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
               <label className="text-sm sm:text-base">⏱️ Duração:</label>
-              <select
-                value={durationChoice}
-                disabled={running}
-                onChange={(e) => {
-                  const newDuration = parseInt(e.target.value, 10);
-                  setDurationChoice(newDuration);
-                  setTimer(newDuration);
-                }}
-                className="rounded px-2 py-1 text-black disabled:opacity-50"
-              >
-                <option value={300}>5 minutos</option>
-                <option value={600}>10 minutos</option>
-                <option value={360}>6 minutos</option>
-                <option value={720}>12 minutos</option>
-              </select>
+              <div className="flex items-center gap-1">
+                <input
+                  aria-label="Minutos"
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={Math.floor(durationChoice / 60)}
+                  disabled={running}
+                  onChange={(e) => updateDuration(e.target.value, durationChoice % 60)}
+                  className="w-16 rounded px-2 py-1 text-center text-black disabled:opacity-50"
+                />
+                <span>min</span>
+                <input
+                  aria-label="Segundos"
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={durationChoice % 60}
+                  disabled={running || durationChoice >= 30 * 60}
+                  onChange={(e) => updateDuration(Math.floor(durationChoice / 60), e.target.value)}
+                  className="w-16 rounded px-2 py-1 text-center text-black disabled:opacity-50"
+                />
+                <span>s</span>
+              </div>
               <button
                 type="button"
                 onClick={toggleScoreboardFullscreen}
@@ -437,15 +467,14 @@ export default function Games() {
                 <button onClick={() => setRunning(false)} className="rounded bg-yellow-600 px-5 py-2 text-lg sm:text-xl">⏸ Pause</button>
               ) : null}
               <button onClick={resetGame} className="rounded bg-gray-600 px-5 py-2 text-lg sm:text-xl">🔄 Reset</button>
-              {isAdmin && (
-                <button
-                  onClick={() => saveGame()}
-                  disabled={savingGame}
-                  className="rounded bg-blue-600 px-5 py-2 text-lg disabled:opacity-50 sm:text-xl"
-                >
-                  {savingGame ? "A guardar…" : "💾 Guardar"}
-                </button>
-              )}
+              <button
+                onClick={() => saveGame()}
+                disabled={savingGame || !isAdmin}
+                title={!isAdmin ? "Inicia sessão como administrador para guardar o jogo." : undefined}
+                className="rounded bg-blue-600 px-5 py-2 text-lg disabled:cursor-not-allowed disabled:opacity-50 sm:text-xl"
+              >
+                {savingGame ? "A guardar…" : isAdmin ? "💾 Guardar" : "🔒 Guardar"}
+              </button>
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-4">
@@ -475,18 +504,20 @@ export default function Games() {
               })}
             </div>
           </section>
-
-          {/* Finish training */}
-          {isAdmin && <div className="text-center mt-8">
-            <button
-              onClick={endTraining}
-              className="bg-purple-600 hover:bg-purple-700 px-6 py-3 text-xl rounded"
-            >
-              🏁 Finalizar Treino
-            </button>
-          </div>}
         </>
       )}
+
+      {/* Always keep the final action at the bottom of the page. */}
+      <div className="mt-8 border-t border-gray-700 pt-8 text-center">
+        <button
+          onClick={endTraining}
+          disabled={!isAdmin || !selectedTraining || teams.length < 2}
+          title={!isAdmin ? "Inicia sessão como administrador para finalizar o treino." : undefined}
+          className="rounded bg-purple-600 px-6 py-3 text-xl hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isAdmin ? "🏁 Finalizar Treino" : "🔒 Finalizar Treino"}
+        </button>
+      </div>
       <audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />
     </div>
   );

@@ -1,11 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  clampGameDuration,
   getGameEndAction,
   getNextTeamPair,
   getRecentGameResults,
   getWinnerTeamNumber,
 } from "./gameLogic.js";
+
+test("clamps custom game durations between zero and thirty minutes", () => {
+  assert.equal(clampGameDuration(5, 0), 300);
+  assert.equal(clampGameDuration(0, 0), 0);
+  assert.equal(clampGameDuration(29, 59), 1799);
+  assert.equal(clampGameDuration(30, 45), 1800);
+  assert.equal(clampGameDuration(-2, -10), 0);
+});
 
 test("automatically saves a finished game with a winner", () => {
   assert.equal(
