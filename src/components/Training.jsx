@@ -4,6 +4,7 @@
   import { useAuth } from "../useAuth";
   import TrainingCalendar from "./TrainingCalendar";
   import { dateFromKey, dateKey } from "../utils/calendar";
+  import { prioritizeAvailablePlayers } from "../utils/attendancePriority";
 
   export default function Training() {
     const [players, setPlayers] = useState([]);
@@ -109,6 +110,10 @@
       else setPresent(data.map((a) => a.player_id));
     };
 
+    const availablePlayers = players.filter((player) => present.includes(player.id));
+    const attendancePriority = prioritizeAvailablePlayers(availablePlayers);
+    const selectedPlayerIds = attendancePriority.selected.map((player) => player.id);
+
     const saveAttendance = async () => {
   if (!selectedTraining) {
     alert("⚠️ Nenhum treino selecionado!");
@@ -127,7 +132,7 @@
   }
 
   // insert new attendance
-  const rows = present.map((pid) => ({
+  const rows = selectedPlayerIds.map((pid) => ({
     training_id: selectedTraining.id,
     player_id: pid,
   }));
@@ -141,7 +146,17 @@
     return;
   }
 
-  alert("✅ Presenças guardadas!");
+  await fetchPlayers();
+
+  if (attendancePriority.waitlisted.length) {
+    alert(
+      `✅ 18 presenças guardadas. Lista de espera: ${attendancePriority.waitlisted
+        .map((player) => player.name)
+        .join(", ")}`,
+    );
+  } else {
+    alert("✅ Presenças guardadas!");
+  }
 };
 
 
@@ -152,7 +167,7 @@
         return;
       }
 
-      const selectedPlayers = players.filter((p) => present.includes(p.id));
+      const selectedPlayers = attendancePriority.selected;
       if (selectedPlayers.length < 6) {
         alert("⚠️ São precisos pelo menos 6 jogadores.");
         return;
@@ -191,7 +206,7 @@
 
     // ====== EDIT MODE helpers ======
     const assignedIds = new Set(teams.flat().map((p) => p.id));
-    const benchPlayers = present
+    const benchPlayers = selectedPlayerIds
       .filter((pid) => !assignedIds.has(pid))
       .map((pid) => players.find((p) => p.id === pid))
       .filter(Boolean);
@@ -324,6 +339,17 @@
                     </button>
                   )}
                 </div>
+
+                {attendancePriority.waitlisted.length > 0 && (
+                  <div className="mt-4 rounded-lg border border-orange-500 bg-orange-950 p-3">
+                    <p className="font-semibold text-orange-200">
+                      Limite de 18 jogadores — lista de espera por assiduidade:
+                    </p>
+                    <p className="mt-1 text-sm text-orange-100">
+                      {attendancePriority.waitlisted.map((player) => player.name).join(", ")}
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">

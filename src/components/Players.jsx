@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../useAuth";
+import {
+  getCombinedAttendance,
+  getCurrentSeasonAttendance,
+  getPreviousSeasonAttendance,
+} from "../utils/attendancePriority";
 
 export default function Players() {
   const [players, setPlayers] = useState([]);
@@ -50,8 +55,10 @@ export default function Players() {
         {players.map((p) => (
           <li key={p.id} className="py-3 flex justify-between">
             <span className="font-medium">{p.name}</span>
-            <span className="text-sm text-gray-400">
-              Treinos: {p.trainings_played} | Pontos: {p.total_points}
+            <span className="text-right text-sm text-gray-400">
+              Época anterior: {getPreviousSeasonAttendance(p)} | Época atual: {getCurrentSeasonAttendance(p)}
+              <br />
+              Total: {getCombinedAttendance(p)} | Pontos: {p.total_points}
             </span>
           </li>
         ))}
