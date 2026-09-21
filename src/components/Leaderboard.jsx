@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import {
+  getCombinedAttendance,
+  getCurrentSeasonAttendance,
+  getPreviousSeasonAttendance,
+} from "../utils/attendancePriority";
 
 export default function Leaderboard() {
   const [players, setPlayers] = useState([]);
@@ -53,6 +58,8 @@ export default function Leaderboard() {
         <thead>
           <tr className="bg-gray-700 text-gray-200">
             <th className="p-2 border border-gray-600">Nome</th>
+            <th className="p-2 border border-gray-600">Época anterior</th>
+            <th className="p-2 border border-gray-600">Época atual</th>
             <th className="p-2 border border-gray-600">Treinos</th>
             <th className="p-2 border border-gray-600">Total</th>
             <th className="p-2 border border-gray-600">Média</th>
@@ -70,7 +77,13 @@ export default function Leaderboard() {
                 {p.name}
               </td>
               <td className="p-2 border border-gray-700">
-                {p.trainings_played}
+                {getPreviousSeasonAttendance(p)}
+              </td>
+              <td className="p-2 border border-gray-700">
+                {getCurrentSeasonAttendance(p)}
+              </td>
+              <td className="p-2 border border-gray-700">
+                {getCombinedAttendance(p)}
               </td>
               <td className="p-2 border border-gray-700 font-bold text-yellow-400">
                 {p.total_points}

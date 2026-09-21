@@ -1,12 +1,37 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabaseClient";
+import { calculateTeamRanking } from "../utils/teamRanking";
+import { useAuth } from "../useAuth";
+import {
+  clampGameDuration,
+  getGameEndAction,
+  getNextTeamPair,
+  getRecentGameResults,
+  getStoredDurationMinutes,
+  getWinnerTeamNumber,
+} from "../utils/gameLogic";
+
+const COLORS = {
+  black: { bg: "#000000", text: "white", name: "Preto" },
+  white: { bg: "#ffffff", text: "black", name: "Branco" },
+  yellow: {
+    bg: "#f5ff00",
+    text: "black",
+    name: "Amarelo",
+    shadow: "0 0 28px rgba(245, 255, 0, 0.5)",
+  },
+};
+
+const TEAM_COLOR = { 1: "yellow", 2: "black", 3: "white" };
+
+const getTeamStyle = (teamNumber) =>
+  COLORS[TEAM_COLOR[Number(teamNumber)] || "black"];
 
 export default function Games() {
-  const [trainings, setTrainings] = useState([]);
+  const { isAdmin } = useAuth();
   const [selectedTraining, setSelectedTraining] = useState(null);
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
-  const [teamColors, setTeamColors] = useState({});
   const [timer, setTimer] = useState(300); // default 5 minutes
   const [durationChoice, setDurationChoice] = useState(300);
   const [running, setRunning] = useState(false);
@@ -14,14 +39,30 @@ export default function Games() {
   const [team2Score, setTeam2Score] = useState(0);
   const [showPlayers, setShowPlayers] = useState({});
   const [allPlayers, setAllPlayers] = useState([]);
-  const [teamWins, setTeamWins] = useState({});
+  const [teamStandings, setTeamStandings] = useState([]);
+  const [recentGames, setRecentGames] = useState([]);
+  const [gameNotice, setGameNotice] = useState("");
+  const [savingGame, setSavingGame] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const hornRef = useRef(null);
+  const scoreboardRef = useRef(null);
+  const saveGameRef = useRef(null);
+  const autoSaveHandledRef = useRef(false);
 
-  const COLORS = {
-    black: { bg: "#000000", text: "white" },
-    white: { bg: "#ffffff", text: "black" },
-    yellow: { bg: "#ffff00", text: "black" },
-  };
+  useEffect(() => {
+    const updateFullscreenState = () => {
+      const fullscreenElement =
+        document.fullscreenElement || document.webkitFullscreenElement;
+      setIsFullscreen(fullscreenElement === scoreboardRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener("webkitfullscreenchange", updateFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", updateFullscreenState);
+    };
+  }, []);
 
   // Load trainings and players
   useEffect(() => {
@@ -29,9 +70,8 @@ export default function Games() {
       const { data, error } = await supabase
         .from("trainings")
         .select("*")
-        .order("date", { ascending: false });
+      .order("date", { ascending: false });
       if (!error && data.length > 0) {
-        setTrainings(data);
         setSelectedTraining(data[0]);
       }
     };
@@ -39,15 +79,7 @@ export default function Games() {
     fetchAllPlayers();
   }, []);
 
-  // Load teams and win stats
-  useEffect(() => {
-    if (selectedTraining) {
-      fetchTeams(selectedTraining.id);
-      fetchTeamWins(selectedTraining.id);
-    }
-  }, [selectedTraining]);
-
-  const fetchTeams = async (trainingId) => {
+  const fetchTeams = useCallback(async (trainingId) => {
     const { data, error } = await supabase
       .from("training_teams")
       .select("*")
@@ -56,13 +88,10 @@ export default function Games() {
 
     if (!error) {
       setTeams(data || []);
-      const defaults = {};
-      (data || []).forEach((t) => {
-        defaults[t.team_number] = "black";
-      });
-      setTeamColors(defaults);
+      return data || [];
     }
-  };
+    return [];
+  }, []);
 
   const fetchAllPlayers = async () => {
     const { data, error } = await supabase.from("players").select("id, name");
@@ -74,27 +103,44 @@ export default function Games() {
     return player ? player.name : id;
   };
 
-  const fetchTeamWins = async (trainingId) => {
+  const fetchGameSummary = useCallback(async (trainingId, currentTeams) => {
     const { data, error } = await supabase
       .from("games")
-      .select("winner")
-      .eq("training_id", trainingId);
+      .select("id, team1, team2, team1_score, team2_score, winner, created_at")
+      .eq("training_id", trainingId)
+      .order("created_at", { ascending: true });
     if (error) return;
-    const wins = {};
-    for (const g of data) {
-      if (g.winner != null) {
-        wins[g.winner] = (wins[g.winner] || 0) + 1;
-      }
+
+    setTeamStandings(calculateTeamRanking(currentTeams, data || []));
+
+    if (!data?.length) {
+      setRecentGames([]);
+      return;
     }
-    setTeamWins(wins);
-  };
+
+    setRecentGames(getRecentGameResults(data, currentTeams));
+  }, []);
+
+  // Load teams, standings and the previous result
+  useEffect(() => {
+    if (selectedTraining) {
+      const loadTrainingGames = async () => {
+        const loadedTeams = await fetchTeams(selectedTraining.id);
+        await fetchGameSummary(selectedTraining.id, loadedTeams);
+      };
+
+      setSelectedTeams([]);
+      setGameNotice("");
+      loadTrainingGames();
+    }
+  }, [selectedTraining, fetchTeams, fetchGameSummary]);
 
   // Timer logic
   useEffect(() => {
     let interval;
     if (running && timer > 0) {
       interval = setInterval(() => setTimer((t) => t - 1), 1000);
-    } else if (timer === 0) {
+    } else if (timer === 0 && running) {
       setRunning(false);
       if (hornRef.current) {
         hornRef.current.currentTime = 0;
@@ -102,9 +148,26 @@ export default function Games() {
           console.warn("⚠️ Horn blocked until user interaction.");
         });
       }
+
+      const action = getGameEndAction({
+        timer,
+        running,
+        selectedTeamCount: selectedTeams.length,
+        team1Score,
+        team2Score,
+      });
+
+      if (action === "free-throws") {
+        setGameNotice("🏀 Empate: decide o jogo nos lances livres, atualiza o resultado final e guarda manualmente.");
+      } else if (action === "missing-teams") {
+        setGameNotice("⚠️ O tempo terminou, mas não foi possível guardar sem duas equipas selecionadas.");
+      } else if (action === "auto-save" && !autoSaveHandledRef.current) {
+        autoSaveHandledRef.current = true;
+        saveGameRef.current?.({ automatic: true });
+      }
     }
     return () => clearInterval(interval);
-  }, [running, timer]);
+  }, [running, timer, selectedTeams.length, team1Score, team2Score]);
 
   const toggleTeamSelection = (team) => {
     if (selectedTeams.some((t) => t.id === team.id)) {
@@ -121,16 +184,49 @@ export default function Games() {
     setTeam1Score(0);
     setTeam2Score(0);
     setRunning(false);
+    setGameNotice("");
+    autoSaveHandledRef.current = false;
   };
 
-  const saveGame = async () => {
+  const updateDuration = (minutes, seconds) => {
+    const newDuration = clampGameDuration(minutes, seconds);
+    setDurationChoice(newDuration);
+    setTimer(newDuration);
+    setGameNotice("");
+    autoSaveHandledRef.current = false;
+  };
+
+  const toggleScoreboardFullscreen = async () => {
+    const fullscreenElement =
+      document.fullscreenElement || document.webkitFullscreenElement;
+
+    try {
+      if (fullscreenElement) {
+        const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+        await exitFullscreen?.call(document);
+      } else {
+        scoreboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const requestFullscreen =
+          scoreboardRef.current?.requestFullscreen ||
+          scoreboardRef.current?.webkitRequestFullscreen;
+        await requestFullscreen?.call(scoreboardRef.current);
+      }
+    } catch {
+      // Scrolling still provides the large scoreboard when fullscreen is unavailable.
+    }
+  };
+
+  const saveGame = async ({ automatic = false } = {}) => {
     if (selectedTeams.length !== 2 || !selectedTraining) return;
+    if (savingGame) return;
 
-    const winner =
-      team1Score > team2Score
-        ? selectedTeams[0].team_number
-        : selectedTeams[1].team_number;
+    const winner = getWinnerTeamNumber(selectedTeams, team1Score, team2Score);
+    if (winner == null) {
+      setGameNotice("🏀 O jogo está empatado. Introduz o resultado final dos lances livres antes de guardar.");
+      return;
+    }
 
+    setSavingGame(true);
     const { error } = await supabase.from("games").insert([
       {
         training_id: selectedTraining.id,
@@ -140,18 +236,28 @@ export default function Games() {
         team2_score: team2Score,
         winner,
         date: selectedTraining.date,
-        duration_minutes: durationChoice / 60,
+        // Supabase stores this legacy field as an integer. The timer itself
+        // still supports exact seconds from 0:00 through 30:00.
+        duration_minutes: getStoredDurationMinutes(durationChoice),
       },
     ]);
 
     if (error) {
       alert("❌ Erro ao guardar jogo: " + error.message);
     } else {
-      alert("✅ Jogo guardado!");
+      const nextTeams = getNextTeamPair(selectedTeams, teams);
+      alert(automatic ? "✅ Tempo terminado: jogo guardado automaticamente!" : "✅ Jogo guardado!");
+      await fetchGameSummary(selectedTraining.id, teams);
       resetGame();
-      fetchTeamWins(selectedTraining.id);
+      setSelectedTeams(nextTeams);
+      setGameNotice(
+        `Próximo jogo: Equipa ${nextTeams[0].team_number} vs Equipa ${nextTeams[1].team_number}`,
+      );
     }
+    setSavingGame(false);
   };
+
+  saveGameRef.current = saveGame;
 
   const endTraining = async () => {
     if (!selectedTraining) return;
@@ -171,12 +277,9 @@ export default function Games() {
       return;
     }
 
-    const winsMap = {};
-    for (const t of allTeams) winsMap[t.team_number] = 0;
-
     const { data: games, error: gamesErr } = await supabase
       .from("games")
-      .select("winner")
+      .select("team1, team2, team1_score, team2_score, winner")
       .eq("training_id", selectedTraining.id);
 
     if (gamesErr) {
@@ -184,19 +287,7 @@ export default function Games() {
       return;
     }
 
-    for (const g of (games || [])) {
-      if (g?.winner != null && winsMap[g.winner] != null) {
-        winsMap[g.winner] += 1;
-      }
-    }
-
-    const ranking = allTeams
-      .map((t) => ({
-        team_number: t.team_number,
-        players: t.players || [],
-        wins: winsMap[t.team_number] || 0,
-      }))
-      .sort((a, b) => b.wins - a.wins);
+    const ranking = calculateTeamRanking(allTeams, games);
 
     const places = Math.min(ranking.length, 3);
     const pointsByPlace = places === 2 ? [3, 2] : [3, 2, 1];
@@ -223,7 +314,19 @@ export default function Games() {
       }
     }
 
-    await supabase.from("training_teams").delete().eq("training_id", selectedTraining.id);
+    const { error: deleteError } = await supabase
+      .from("training_teams")
+      .delete()
+      .eq("training_id", selectedTraining.id);
+
+    if (deleteError) {
+      alert("Os pontos foram atribuídos, mas ocorreu um erro ao remover as equipas: " + deleteError.message);
+      return;
+    }
+
+    setTeams([]);
+    setSelectedTeams([]);
+    setTeamStandings([]);
     alert("✅ Pontos atribuídos e equipas removidas!");
   };
 
@@ -231,53 +334,67 @@ export default function Games() {
     <div className="p-6 max-w-6xl mx-auto bg-gray-900 text-white rounded-2xl shadow-lg">
       <h1 className="text-4xl font-bold mb-8 text-center">🎮 Jogos</h1>
 
-      {/* Wins summary */}
-      {Object.keys(teamWins).length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">📊 Vitórias até agora</h2>
-          <ul className="space-y-2">
-            {Object.entries(teamWins).map(([team, wins]) => (
-              <li key={team} className="p-3 bg-gray-800 rounded-lg">
-                Equipa {team}: <strong>{wins}</strong> vitória(s)
-              </li>
-            ))}
-          </ul>
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl bg-gray-800 p-4">
+          <h2 className="mb-3 text-xl font-bold">📊 Classificação</h2>
+          {teamStandings.length ? (
+            <ol className="space-y-2">
+              {teamStandings.map((team, index) => (
+                <li key={team.team_number} className="flex items-center justify-between rounded bg-gray-700 p-2">
+                  <span>{index + 1}.º Equipa {team.team_number}</span>
+                  <span><strong>{team.wins}</strong> V / <strong>{team.losses}</strong> D</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-gray-400">Ainda não existem equipas.</p>
+          )}
         </div>
-      )}
 
-      {/* Teams with color selector */}
+        <div className="rounded-xl bg-gray-800 p-4">
+          <h2 className="mb-3 text-xl font-bold">⏮️ Últimos 3 jogos</h2>
+          {recentGames.length ? (
+            <ol className="space-y-2">
+              {recentGames.map((game, index) => (
+                <li
+                  key={game.id}
+                  className={`flex items-center justify-center gap-3 rounded p-2 text-center ${
+                    index === 0 ? "bg-gray-700" : "bg-gray-900"
+                  }`}
+                >
+                  <span className="font-semibold">Equipa {game.team1}</span>
+                  <strong className="text-xl">{game.team1Score} – {game.team2Score}</strong>
+                  <span className="font-semibold">Equipa {game.team2}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-gray-400">Ainda não existem jogos guardados.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Teams with fixed colours */}
       <h2 className="text-xl font-semibold mb-4">Escolhe 2 equipas:</h2>
       <div className="grid md:grid-cols-3 gap-4 mb-8">
         {teams.map((team) => {
-          const color = teamColors[team.team_number] || "black";
-          const bg = COLORS[color].bg;
-          const text = COLORS[color].text;
+          const style = getTeamStyle(team.team_number);
+          const isSelected = selectedTeams.some((selected) => selected.id === team.id);
 
           return (
             <div
               key={team.id}
-              className={`p-4 rounded-xl cursor-pointer transition ${
-                selectedTeams.some((t) => t.id === team.id) ? "ring-4 ring-green-500" : ""
-              }`}
-              style={{ backgroundColor: bg, color: text }}
+              className="cursor-pointer rounded-xl p-4 transition"
+              style={{
+                backgroundColor: style.bg,
+                color: style.text,
+                boxShadow: style.shadow,
+                outline: isSelected ? "4px solid #22c55e" : "none",
+                outlineOffset: isSelected ? "4px" : "0",
+              }}
               onClick={() => toggleTeamSelection(team)}
             >
-              <h3 className="font-bold mb-2">Equipa {team.team_number}</h3>
-              <select
-                value={color}
-                onChange={(e) =>
-                  setTeamColors((prev) => ({
-                    ...prev,
-                    [team.team_number]: e.target.value,
-                  }))
-                }
-                className="px-2 py-1 mb-2 rounded text-black"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <option value="black">⚫ Preto</option>
-                <option value="white">⚪ Branco</option>
-                <option value="yellow">🟡 Amarelo</option>
-              </select>
+              <h3 className="font-bold mb-2">Equipa {team.team_number} · {style.name}</h3>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -304,72 +421,111 @@ export default function Games() {
       {/* Timer + Scoreboard */}
       {selectedTeams.length === 2 && (
         <>
-          {/* Time Selector */}
-          <div className="flex items-center justify-center mb-6">
-            <label className="mr-3 text-lg">⏱️ Duração:</label>
-            <select
-              value={durationChoice}
-              onChange={(e) => {
-                const newDuration = parseInt(e.target.value, 10);
-                setDurationChoice(newDuration);
-                setTimer(newDuration);
-              }}
-              className="text-black px-3 py-2 rounded"
-            >
-              <option value={300}>5 minutos</option>
-              <option value={600}>10 minutos</option>
-              <option value={360}>6 minutos</option>
-              <option value={720}>12 minutos</option>
-            </select>
-          </div>
+          <section
+            ref={scoreboardRef}
+            className="flex min-h-[100svh] scroll-mt-2 flex-col overflow-hidden rounded-2xl bg-gray-950 p-2 text-center sm:p-4"
+          >
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+              <label className="text-sm sm:text-base">⏱️ Duração:</label>
+              <div className="flex items-center gap-1">
+                <input
+                  aria-label="Minutos"
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={Math.floor(durationChoice / 60)}
+                  disabled={running}
+                  onChange={(e) => updateDuration(e.target.value, durationChoice % 60)}
+                  className="w-16 rounded px-2 py-1 text-center text-black disabled:opacity-50"
+                />
+                <span>min</span>
+                <input
+                  aria-label="Segundos"
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={durationChoice % 60}
+                  disabled={running || durationChoice >= 30 * 60}
+                  onChange={(e) => updateDuration(Math.floor(durationChoice / 60), e.target.value)}
+                  className="w-16 rounded px-2 py-1 text-center text-black disabled:opacity-50"
+                />
+                <span>s</span>
+              </div>
+              <button
+                type="button"
+                onClick={toggleScoreboardFullscreen}
+                className="rounded bg-gray-700 px-3 py-1 hover:bg-gray-600"
+              >
+                {isFullscreen ? "⛶ Sair do ecrã inteiro" : "⛶ Ecrã inteiro"}
+              </button>
+            </div>
 
-          <div className="text-center mb-10">
-            <div className="text-8xl md:text-9xl font-mono font-bold">
+            <div className="font-mono text-[clamp(5rem,20vh,12rem)] font-black leading-none tracking-tight">
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, "0")}
             </div>
-            <div className="flex justify-center gap-4 mt-6">
-              {!running ? (
-                <button onClick={() => setRunning(true)} className="bg-green-600 px-6 py-3 text-xl rounded">▶️ Start</button>
-              ) : (
-                <button onClick={() => setRunning(false)} className="bg-yellow-600 px-6 py-3 text-xl rounded">⏸ Pause</button>
-              )}
-              <button onClick={resetGame} className="bg-gray-600 px-6 py-3 text-xl rounded">🔄 Reset</button>
-              <button onClick={saveGame} className="bg-blue-600 px-6 py-3 text-xl rounded">💾 Guardar</button>
+            {gameNotice && (
+              <p className="mx-auto max-w-3xl rounded-lg bg-orange-700 p-2 font-semibold sm:p-3">
+                {gameNotice}
+              </p>
+            )}
+            <div className="my-2 flex flex-wrap justify-center gap-2 sm:gap-4">
+              {!running && timer > 0 ? (
+                <button onClick={() => setRunning(true)} className="rounded bg-green-600 px-5 py-2 text-lg sm:text-xl">▶️ Start</button>
+              ) : running ? (
+                <button onClick={() => setRunning(false)} className="rounded bg-yellow-600 px-5 py-2 text-lg sm:text-xl">⏸ Pause</button>
+              ) : null}
+              <button onClick={resetGame} className="rounded bg-gray-600 px-5 py-2 text-lg sm:text-xl">🔄 Reset</button>
+              <button
+                onClick={() => saveGame()}
+                disabled={savingGame || !isAdmin}
+                title={!isAdmin ? "Inicia sessão como administrador para guardar o jogo." : undefined}
+                className="rounded bg-blue-600 px-5 py-2 text-lg disabled:cursor-not-allowed disabled:opacity-50 sm:text-xl"
+              >
+                {savingGame ? "A guardar…" : isAdmin ? "💾 Guardar" : "🔒 Guardar"}
+              </button>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-8 mb-10 text-center">
-            {selectedTeams.map((team, idx) => {
-              const color = teamColors[team.team_number] || "black";
-              const bg = COLORS[color].bg;
-              const text = COLORS[color].text;
-              const score = idx === 0 ? team1Score : team2Score;
-              const setScore = idx === 0 ? setTeam1Score : setTeam2Score;
+            <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-4">
+              {selectedTeams.map((team, idx) => {
+                const style = getTeamStyle(team.team_number);
+                const score = idx === 0 ? team1Score : team2Score;
+                const setScore = idx === 0 ? setTeam1Score : setTeam2Score;
 
-              return (
-                <div key={idx} className="p-6 rounded-2xl shadow-lg" style={{ backgroundColor: bg, color: text }}>
-                  <h2 className="text-3xl font-bold mb-4">Equipa {team.team_number}</h2>
-                  <p className="text-8xl font-extrabold mb-6">{score}</p>
-                  <div className="flex gap-4 justify-center">
-                    <button onClick={() => setScore((s) => s + 1)} className="bg-green-600 px-4 py-2 rounded text-xl">+1</button>
-                    <button onClick={() => setScore((s) => Math.max(0, s - 1))} className="bg-red-600 px-4 py-2 rounded text-xl">-1</button>
+                return (
+                  <div
+                    key={team.id}
+                    className="flex min-h-0 flex-col justify-between rounded-2xl p-2 shadow-lg sm:p-4"
+                    style={{ backgroundColor: style.bg, color: style.text, boxShadow: style.shadow }}
+                  >
+                    <h2 className="text-[clamp(1.5rem,4vw,3.5rem)] font-black leading-none">
+                      Equipa {team.team_number}
+                    </h2>
+                    <p className="flex flex-1 items-center justify-center text-[clamp(8rem,30vh,20rem)] font-black leading-none tracking-tighter">
+                      {score}
+                    </p>
+                    <div className="flex justify-center gap-2 sm:gap-4">
+                      <button onClick={() => setScore((s) => s + 1)} className="rounded bg-green-600 px-5 py-2 text-2xl font-bold sm:px-8 sm:py-3">+1</button>
+                      <button onClick={() => setScore((s) => Math.max(0, s - 1))} className="rounded bg-red-600 px-5 py-2 text-2xl font-bold sm:px-8 sm:py-3">-1</button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Finish training */}
-          <div className="text-center mt-8">
-            <button
-              onClick={endTraining}
-              className="bg-purple-600 hover:bg-purple-700 px-6 py-3 text-xl rounded"
-            >
-              🏁 Finalizar Treino
-            </button>
-          </div>
+                );
+              })}
+            </div>
+          </section>
         </>
       )}
+
+      {/* Always keep the final action at the bottom of the page. */}
+      <div className="mt-8 border-t border-gray-700 pt-8 text-center">
+        <button
+          onClick={endTraining}
+          disabled={!isAdmin || !selectedTraining || teams.length < 2}
+          title={!isAdmin ? "Inicia sessão como administrador para finalizar o treino." : undefined}
+          className="rounded bg-purple-600 px-6 py-3 text-xl hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isAdmin ? "🏁 Finalizar Treino" : "🔒 Finalizar Treino"}
+        </button>
+      </div>
       <audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />
     </div>
   );

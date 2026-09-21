@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-
-const ADMIN_PASS = "treino123";
+import { useAuth } from "../useAuth";
+import {
+  getCombinedAttendance,
+  getCurrentSeasonAttendance,
+  getPreviousSeasonAttendance,
+} from "../utils/attendancePriority";
 
 export default function Players() {
   const [players, setPlayers] = useState([]);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [passInput, setPassInput] = useState("");
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     fetchPlayers();
@@ -39,15 +42,6 @@ export default function Players() {
     }
   };
 
-  const checkPassword = () => {
-    if (passInput === ADMIN_PASS) {
-      setIsAdmin(true);
-      setPassInput("");
-    } else {
-      alert("❌ Wrong password");
-    }
-  };
-
   return (
     <div className="p-6 max-w-2xl mx-auto bg-gray-800 text-white rounded-2xl shadow-lg">
       <h1 className="text-3xl font-bold mb-6 text-center">👥 Jogadores</h1>
@@ -61,34 +55,17 @@ export default function Players() {
         {players.map((p) => (
           <li key={p.id} className="py-3 flex justify-between">
             <span className="font-medium">{p.name}</span>
-            <span className="text-sm text-gray-400">
-              Treinos: {p.trainings_played} | Pontos: {p.total_points}
+            <span className="text-right text-sm text-gray-400">
+              Época anterior: {getPreviousSeasonAttendance(p)} | Época atual: {getCurrentSeasonAttendance(p)}
+              <br />
+              Total: {getCombinedAttendance(p)} | Pontos: {p.total_points}
             </span>
           </li>
         ))}
       </ul>
 
       {/* Admin section */}
-      {!isAdmin ? (
-        <div className="mt-4 p-4 border rounded bg-gray-700">
-          <h2 className="font-semibold mb-2">🔒 Admin login</h2>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              placeholder="Password"
-              className="border px-3 py-2 flex-1 rounded bg-gray-600 text-white"
-              value={passInput}
-              onChange={(e) => setPassInput(e.target.value)}
-            />
-            <button
-              onClick={checkPassword}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              Login
-            </button>
-          </div>
-        </div>
-      ) : (
+      {isAdmin && (
         <form
           onSubmit={handleAddPlayer}
           className="mt-4 p-4 border rounded bg-green-50 bg-opacity-10"
