@@ -379,14 +379,19 @@ export default function Games() {
       <div className="grid md:grid-cols-3 gap-4 mb-8">
         {teams.map((team) => {
           const style = getTeamStyle(team.team_number);
+          const isSelected = selectedTeams.some((selected) => selected.id === team.id);
 
           return (
             <div
               key={team.id}
-              className={`p-4 rounded-xl cursor-pointer transition ${
-                selectedTeams.some((t) => t.id === team.id) ? "ring-4 ring-green-500" : ""
-              }`}
-              style={{ backgroundColor: style.bg, color: style.text, boxShadow: style.shadow }}
+              className="cursor-pointer rounded-xl p-4 transition"
+              style={{
+                backgroundColor: style.bg,
+                color: style.text,
+                boxShadow: style.shadow,
+                outline: isSelected ? "4px solid #22c55e" : "none",
+                outlineOffset: isSelected ? "4px" : "0",
+              }}
               onClick={() => toggleTeamSelection(team)}
             >
               <h3 className="font-bold mb-2">Equipa {team.team_number} · {style.name}</h3>
