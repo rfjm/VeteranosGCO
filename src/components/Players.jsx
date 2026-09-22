@@ -2,16 +2,20 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../useAuth";
 import {
+  formatAttendanceRecord,
   getCombinedAttendance,
   getCurrentSeasonAttendance,
   getPreviousSeasonAttendance,
+  PREVIOUS_SEASON_TOTAL_TRAININGS,
 } from "../utils/attendancePriority";
+import { useCurrentSeasonTrainingTotal } from "../useCurrentSeasonTrainingTotal";
 
 export default function Players() {
   const [players, setPlayers] = useState([]);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState(null);
   const { isAdmin } = useAuth();
+  const currentSeasonTotal = useCurrentSeasonTrainingTotal();
 
   useEffect(() => {
     fetchPlayers();
@@ -56,7 +60,9 @@ export default function Players() {
           <li key={p.id} className="py-3 flex justify-between">
             <span className="font-medium">{p.name}</span>
             <span className="text-right text-sm text-gray-400">
-              Época anterior: {getPreviousSeasonAttendance(p)} | Época atual: {getCurrentSeasonAttendance(p)}
+              Época anterior: {formatAttendanceRecord(getPreviousSeasonAttendance(p), PREVIOUS_SEASON_TOTAL_TRAININGS)}
+              {" | "}
+              Época atual: {formatAttendanceRecord(getCurrentSeasonAttendance(p), currentSeasonTotal)}
               <br />
               Total: {getCombinedAttendance(p)} | Pontos: {p.total_points}
             </span>

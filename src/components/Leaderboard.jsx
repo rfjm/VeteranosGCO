@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import {
+  formatAttendanceRecord,
   getCombinedAttendance,
   getCurrentSeasonAttendance,
   getPreviousSeasonAttendance,
+  PREVIOUS_SEASON_TOTAL_TRAININGS,
+  rankPlayersByPointsAndAttendance,
 } from "../utils/attendancePriority";
+import { useCurrentSeasonTrainingTotal } from "../useCurrentSeasonTrainingTotal";
 
 export default function Leaderboard() {
   const [players, setPlayers] = useState([]);
   const [mvp, setMvp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const currentSeasonTotal = useCurrentSeasonTrainingTotal();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -31,7 +36,7 @@ export default function Leaderboard() {
         .limit(1)
         .maybeSingle();
 
-      setPlayers(ranking || []);
+      setPlayers(rankPlayersByPointsAndAttendance(ranking || []));
       setMvp(mvpMes || null);
       setLoading(false);
     };
@@ -54,7 +59,8 @@ export default function Leaderboard() {
         </div>
       )}
 
-      <table className="table-auto w-full border-collapse rounded overflow-hidden">
+      <div className="overflow-x-auto">
+      <table className="table-auto w-full min-w-[720px] border-collapse rounded overflow-hidden">
         <thead>
           <tr className="bg-gray-700 text-gray-200">
             <th className="p-2 border border-gray-600">Nome</th>
@@ -77,10 +83,10 @@ export default function Leaderboard() {
                 {p.name}
               </td>
               <td className="p-2 border border-gray-700">
-                {getPreviousSeasonAttendance(p)}
+                {formatAttendanceRecord(getPreviousSeasonAttendance(p), PREVIOUS_SEASON_TOTAL_TRAININGS)}
               </td>
               <td className="p-2 border border-gray-700">
-                {getCurrentSeasonAttendance(p)}
+                {formatAttendanceRecord(getCurrentSeasonAttendance(p), currentSeasonTotal)}
               </td>
               <td className="p-2 border border-gray-700">
                 {getCombinedAttendance(p)}
@@ -95,6 +101,7 @@ export default function Leaderboard() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

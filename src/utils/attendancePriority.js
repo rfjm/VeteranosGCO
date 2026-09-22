@@ -3,6 +3,12 @@ const attendanceValue = (player, field, fallback = 0) => {
   return Number.isFinite(value) ? value : fallback;
 };
 
+export const PREVIOUS_SEASON_TOTAL_TRAININGS = 61;
+export const CURRENT_SEASON_START_DATE = "2026-09-01";
+
+export const formatAttendanceRecord = (attendance, totalTrainings) =>
+  `${Math.max(0, Number(attendance) || 0)}/${Math.max(0, Number(totalTrainings) || 0)}`;
+
 export const getPreviousSeasonAttendance = (player) =>
   attendanceValue(
     player,
@@ -15,6 +21,19 @@ export const getCurrentSeasonAttendance = (player) =>
 
 export const getCombinedAttendance = (player) =>
   getPreviousSeasonAttendance(player) + getCurrentSeasonAttendance(player);
+
+export const rankPlayersByPointsAndAttendance = (players) =>
+  [...players].sort((first, second) => {
+    const pointsDifference =
+      (Number(second.total_points) || 0) - (Number(first.total_points) || 0);
+    if (pointsDifference !== 0) return pointsDifference;
+
+    const attendanceDifference =
+      getCombinedAttendance(second) - getCombinedAttendance(first);
+    if (attendanceDifference !== 0) return attendanceDifference;
+
+    return String(first.name || "").localeCompare(String(second.name || ""), "pt");
+  });
 
 export const prioritizeAvailablePlayers = (availablePlayers, limit = 18) => {
   const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));

@@ -1,9 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatAttendanceRecord,
   getCombinedAttendance,
   prioritizeAvailablePlayers,
+  rankPlayersByPointsAndAttendance,
 } from "./attendancePriority.js";
+
+test("formats player attendance against the season total", () => {
+  assert.equal(formatAttendanceRecord(54, 61), "54/61");
+  assert.equal(formatAttendanceRecord(undefined, undefined), "0/0");
+});
+
+test("ranks players by points and uses attendance to break ties", () => {
+  const players = [
+    { id: 1, name: "Ten points", total_points: 10, previous_season_trainings: 4 },
+    { id: 2, name: "More attendance", total_points: 8, previous_season_trainings: 20 },
+    { id: 3, name: "Less attendance", total_points: 8, previous_season_trainings: 12 },
+  ];
+
+  assert.deepEqual(
+    rankPlayersByPointsAndAttendance(players).map((player) => player.id),
+    [1, 2, 3],
+  );
+});
 
 test("combines previous and current season attendance", () => {
   assert.equal(
