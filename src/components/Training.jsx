@@ -9,6 +9,27 @@
     prioritizeAvailablePlayers,
   } from "../utils/attendancePriority";
 
+  const TEAM_STYLES = [
+    {
+      name: "Amarela",
+      card: "border-[#f5ff00] bg-[#f5ff00] text-black",
+      detail: "text-gray-700",
+      player: "bg-yellow-100 text-black",
+    },
+    {
+      name: "Preta",
+      card: "border-gray-500 bg-black text-white",
+      detail: "text-gray-300",
+      player: "bg-gray-900 text-white",
+    },
+    {
+      name: "Branca",
+      card: "border-white bg-white text-black",
+      detail: "text-gray-600",
+      player: "bg-gray-100 text-black",
+    },
+  ];
+
   export default function Training() {
     const [players, setPlayers] = useState([]);
     const [present, setPresent] = useState([]); // array of player IDs
@@ -390,15 +411,18 @@
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {teams.map((team, idx) => (
-                <div key={idx} className="p-4 border rounded bg-gray-700 shadow-sm">
-                  <h3 className="font-bold text-blue-300">Equipa {idx + 1}</h3>
-                  <p className="mb-2 text-sm text-gray-300">
+              {teams.map((team, idx) => {
+                const teamStyle = TEAM_STYLES[idx] || TEAM_STYLES[1];
+
+                return (
+                <div key={idx} className={`p-4 border-2 rounded shadow-sm ${teamStyle.card}`}>
+                  <h3 className="font-bold">Equipa {idx + 1} · {teamStyle.name}</h3>
+                  <p className={`mb-2 text-sm ${teamStyle.detail}`}>
                     Média: {getTeamAverage(team).toFixed(2)}
                   </p>
                   <ul className="space-y-2">
                     {team.map((p) => (
-                      <li key={p.id} className="flex items-center justify-between gap-2 bg-gray-800 px-2 py-2 rounded">
+                      <li key={p.id} className={`flex items-center justify-between gap-2 px-2 py-2 rounded ${teamStyle.player}`}>
                         <span>{p.name}</span>
                         {editMode && (
                           <div className="flex gap-2">
@@ -425,7 +449,8 @@
                     ))}
                   </ul>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {editMode && (
