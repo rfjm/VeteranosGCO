@@ -238,15 +238,14 @@ export default function Games() {
     ]);
 
     if (error) {
-      alert("❌ Erro ao guardar jogo: " + error.message);
+      setGameNotice("❌ Erro ao guardar jogo: " + error.message);
     } else {
       const nextTeams = getNextTeamPair(selectedTeams, teams);
-      alert("✅ Jogo guardado!");
       await fetchGameSummary(selectedTraining.id, teams);
       resetGame();
       setSelectedTeams(nextTeams);
       setGameNotice(
-        `Próximo jogo: Equipa ${nextTeams[0].team_number} vs Equipa ${nextTeams[1].team_number}`,
+        `✅ Jogo guardado! Próximo jogo: Equipa ${nextTeams[0].team_number} vs Equipa ${nextTeams[1].team_number}`,
       );
     }
     setSavingGame(false);
