@@ -5,6 +5,7 @@ const attendanceValue = (player, field, fallback = 0) => {
 
 export const PREVIOUS_SEASON_TOTAL_TRAININGS = 61;
 export const CURRENT_SEASON_START_DATE = "2026-09-01";
+export const HISTORIC_TEAM_RATING_DATE = "2026-09-22";
 
 export const formatAttendanceRecord = (attendance, totalTrainings) =>
   `${Math.max(0, Number(attendance) || 0)}/${Math.max(0, Number(totalTrainings) || 0)}`;
@@ -18,6 +19,30 @@ export const getPreviousSeasonAttendance = (player) =>
 
 export const getCurrentSeasonAttendance = (player) =>
   attendanceValue(player, "current_season_trainings");
+
+export const getPreviousSeasonPoints = (player) =>
+  attendanceValue(player, "previous_season_points");
+
+const pointsPerAttendance = (points, attendance) => {
+  const appearances = Math.max(0, Number(attendance) || 0);
+  return appearances > 0 ? (Number(points) || 0) / appearances : 0;
+};
+
+export const getPlayerTeamRating = (player, trainingDate) => {
+  const date = String(trainingDate || "").slice(0, 10);
+
+  if (date === HISTORIC_TEAM_RATING_DATE) {
+    return pointsPerAttendance(
+      getPreviousSeasonPoints(player),
+      getPreviousSeasonAttendance(player),
+    );
+  }
+
+  return pointsPerAttendance(
+    attendanceValue(player, "total_points"),
+    getCurrentSeasonAttendance(player),
+  );
+};
 
 export const getCombinedAttendance = (player) =>
   getPreviousSeasonAttendance(player) + getCurrentSeasonAttendance(player);

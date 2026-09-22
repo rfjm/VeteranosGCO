@@ -6,6 +6,7 @@ import {
   getCombinedAttendance,
   getCurrentSeasonAttendance,
   getPreviousSeasonAttendance,
+  getPreviousSeasonPoints,
   PREVIOUS_SEASON_TOTAL_TRAININGS,
 } from "../utils/attendancePriority";
 import { useCurrentSeasonTrainingTotal } from "../useCurrentSeasonTrainingTotal";
@@ -64,7 +65,9 @@ export default function Players() {
               {" | "}
               Época atual: {formatAttendanceRecord(getCurrentSeasonAttendance(p), currentSeasonTotal)}
               <br />
-              Total: {getCombinedAttendance(p)} | Pontos: {p.total_points}
+              Total: {getCombinedAttendance(p)}
+              <br />
+              Pontos 25/26: {getPreviousSeasonPoints(p)} | Pontos 26/27: {p.total_points}
             </span>
           </li>
         ))}

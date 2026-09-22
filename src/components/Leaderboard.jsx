@@ -5,6 +5,7 @@ import {
   getCombinedAttendance,
   getCurrentSeasonAttendance,
   getPreviousSeasonAttendance,
+  getPreviousSeasonPoints,
   PREVIOUS_SEASON_TOTAL_TRAININGS,
   rankPlayersByPointsAndAttendance,
 } from "../utils/attendancePriority";
@@ -60,14 +61,15 @@ export default function Leaderboard() {
       )}
 
       <div className="overflow-x-auto">
-      <table className="table-auto w-full min-w-[720px] border-collapse rounded overflow-hidden">
+      <table className="table-auto w-full min-w-[820px] border-collapse rounded overflow-hidden">
         <thead>
           <tr className="bg-gray-700 text-gray-200">
             <th className="p-2 border border-gray-600">Nome</th>
             <th className="p-2 border border-gray-600">Época anterior</th>
             <th className="p-2 border border-gray-600">Época atual</th>
             <th className="p-2 border border-gray-600">Treinos</th>
-            <th className="p-2 border border-gray-600">Total</th>
+            <th className="p-2 border border-gray-600">Pontos 25/26</th>
+            <th className="p-2 border border-gray-600">Pontos 26/27</th>
             <th className="p-2 border border-gray-600">Média</th>
           </tr>
         </thead>
@@ -92,6 +94,9 @@ export default function Leaderboard() {
                 {getCombinedAttendance(p)}
               </td>
               <td className="p-2 border border-gray-700 font-bold text-yellow-400">
+                {getPreviousSeasonPoints(p)}
+              </td>
+              <td className="p-2 border border-gray-700 font-bold text-green-400">
                 {p.total_points}
               </td>
               <td className="p-2 border border-gray-700">

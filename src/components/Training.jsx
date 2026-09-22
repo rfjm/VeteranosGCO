@@ -4,7 +4,10 @@
   import { useAuth } from "../useAuth";
   import TrainingCalendar from "./TrainingCalendar";
   import { dateFromKey, dateKey } from "../utils/calendar";
-  import { prioritizeAvailablePlayers } from "../utils/attendancePriority";
+  import {
+    getPlayerTeamRating,
+    prioritizeAvailablePlayers,
+  } from "../utils/attendancePriority";
 
   export default function Training() {
     const [players, setPlayers] = useState([]);
@@ -184,7 +187,11 @@
           : selectedPlayers.length <= 14
             ? parseInt(choice12, 10)
             : 3;
-      const newTeams = createBalancedTeams(selectedPlayers, numberOfTeams);
+      const playersForBalancing = selectedPlayers.map((player) => ({
+        ...player,
+        average_points: getPlayerTeamRating(player, selectedTraining.date),
+      }));
+      const newTeams = createBalancedTeams(playersForBalancing, numberOfTeams);
       if (!newTeams || newTeams.length === 0) return;
 
       setTeams(newTeams);

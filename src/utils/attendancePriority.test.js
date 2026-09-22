@@ -3,9 +3,40 @@ import assert from "node:assert/strict";
 import {
   formatAttendanceRecord,
   getCombinedAttendance,
+  getPlayerTeamRating,
+  getPreviousSeasonPoints,
   prioritizeAvailablePlayers,
   rankPlayersByPointsAndAttendance,
 } from "./attendancePriority.js";
+
+test("reads previous-season points without affecting current points", () => {
+  const player = { previous_season_points: 109, total_points: 0 };
+
+  assert.equal(getPreviousSeasonPoints(player), 109);
+  assert.equal(player.total_points, 0);
+});
+
+test("uses 2025/26 points per attendance for the 22 September teams", () => {
+  const player = {
+    previous_season_points: 93,
+    previous_season_trainings: 47,
+    total_points: 6,
+    current_season_trainings: 2,
+  };
+
+  assert.equal(getPlayerTeamRating(player, "2026-09-22"), 93 / 47);
+});
+
+test("uses only current-season points per attendance after 22 September", () => {
+  const player = {
+    previous_season_points: 109,
+    previous_season_trainings: 51,
+    total_points: 6,
+    current_season_trainings: 2,
+  };
+
+  assert.equal(getPlayerTeamRating(player, "2026-09-23"), 3);
+});
 
 test("formats player attendance against the season total", () => {
   assert.equal(formatAttendanceRecord(54, 61), "54/61");
