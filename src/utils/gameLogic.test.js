@@ -23,7 +23,7 @@ test("stores custom durations as whole minutes for the integer database column",
   assert.equal(getStoredDurationMinutes(30 * 60), 30);
 });
 
-test("automatically saves a finished game with a winner", () => {
+test("requires manual confirmation when a finished game has a winner", () => {
   assert.equal(
     getGameEndAction({
       timer: 0,
@@ -32,7 +32,7 @@ test("automatically saves a finished game with a winner", () => {
       team1Score: 10,
       team2Score: 8,
     }),
-    "auto-save",
+    "manual-save",
   );
 });
 

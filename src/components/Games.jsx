@@ -46,8 +46,6 @@ export default function Games() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const hornRef = useRef(null);
   const scoreboardRef = useRef(null);
-  const saveGameRef = useRef(null);
-  const autoSaveHandledRef = useRef(false);
 
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -161,9 +159,8 @@ export default function Games() {
         setGameNotice("🏀 Empate: decide o jogo nos lances livres, atualiza o resultado final e guarda manualmente.");
       } else if (action === "missing-teams") {
         setGameNotice("⚠️ O tempo terminou, mas não foi possível guardar sem duas equipas selecionadas.");
-      } else if (action === "auto-save" && !autoSaveHandledRef.current) {
-        autoSaveHandledRef.current = true;
-        saveGameRef.current?.({ automatic: true });
+      } else if (action === "manual-save") {
+        setGameNotice("⏱️ Tempo terminado: confirma ou ajusta o resultado e carrega em Guardar.");
       }
     }
     return () => clearInterval(interval);
@@ -185,7 +182,6 @@ export default function Games() {
     setTeam2Score(0);
     setRunning(false);
     setGameNotice("");
-    autoSaveHandledRef.current = false;
   };
 
   const updateDuration = (minutes, seconds) => {
@@ -193,7 +189,6 @@ export default function Games() {
     setDurationChoice(newDuration);
     setTimer(newDuration);
     setGameNotice("");
-    autoSaveHandledRef.current = false;
   };
 
   const toggleScoreboardFullscreen = async () => {
@@ -216,7 +211,7 @@ export default function Games() {
     }
   };
 
-  const saveGame = async ({ automatic = false } = {}) => {
+  const saveGame = async () => {
     if (selectedTeams.length !== 2 || !selectedTraining) return;
     if (savingGame) return;
 
@@ -246,7 +241,7 @@ export default function Games() {
       alert("❌ Erro ao guardar jogo: " + error.message);
     } else {
       const nextTeams = getNextTeamPair(selectedTeams, teams);
-      alert(automatic ? "✅ Tempo terminado: jogo guardado automaticamente!" : "✅ Jogo guardado!");
+      alert("✅ Jogo guardado!");
       await fetchGameSummary(selectedTraining.id, teams);
       resetGame();
       setSelectedTeams(nextTeams);
@@ -256,8 +251,6 @@ export default function Games() {
     }
     setSavingGame(false);
   };
-
-  saveGameRef.current = saveGame;
 
   const endTraining = async () => {
     if (!selectedTraining) return;

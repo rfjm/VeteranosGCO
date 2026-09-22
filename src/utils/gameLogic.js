@@ -8,7 +8,7 @@ export const getGameEndAction = ({
   if (!running || timer !== 0) return "none";
   if (selectedTeamCount !== 2) return "missing-teams";
   if (team1Score === team2Score) return "free-throws";
-  return "auto-save";
+  return "manual-save";
 };
 
 export const getWinnerTeamNumber = (selectedTeams, team1Score, team2Score) => {
