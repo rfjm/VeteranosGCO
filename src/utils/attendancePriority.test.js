@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   formatAttendanceRecord,
   getCombinedAttendance,
+  getCurrentSeasonAverage,
   getPlayerTeamRating,
   getPreviousSeasonPoints,
   prioritizeAvailablePlayers,
@@ -36,6 +37,17 @@ test("uses only current-season points per attendance after 22 September", () => 
   };
 
   assert.equal(getPlayerTeamRating(player, "2026-09-23"), 3);
+});
+
+test("calculates the current average after the first practice", () => {
+  assert.equal(
+    getCurrentSeasonAverage({ total_points: 3, current_season_trainings: 1 }),
+    3,
+  );
+  assert.equal(
+    getCurrentSeasonAverage({ total_points: 0, current_season_trainings: 0 }),
+    0,
+  );
 });
 
 test("formats player attendance against the season total", () => {

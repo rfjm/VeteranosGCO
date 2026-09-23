@@ -28,6 +28,12 @@ const pointsPerAttendance = (points, attendance) => {
   return appearances > 0 ? (Number(points) || 0) / appearances : 0;
 };
 
+export const getCurrentSeasonAverage = (player) =>
+  pointsPerAttendance(
+    attendanceValue(player, "total_points"),
+    getCurrentSeasonAttendance(player),
+  );
+
 export const getPlayerTeamRating = (player, trainingDate) => {
   const date = String(trainingDate || "").slice(0, 10);
 
@@ -38,10 +44,7 @@ export const getPlayerTeamRating = (player, trainingDate) => {
     );
   }
 
-  return pointsPerAttendance(
-    attendanceValue(player, "total_points"),
-    getCurrentSeasonAttendance(player),
-  );
+  return getCurrentSeasonAverage(player);
 };
 
 export const getCombinedAttendance = (player) =>

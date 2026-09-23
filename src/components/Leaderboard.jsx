@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 import {
   formatAttendanceRecord,
   getCombinedAttendance,
+  getCurrentSeasonAverage,
   getCurrentSeasonAttendance,
   getPreviousSeasonAttendance,
   getPreviousSeasonPoints,
@@ -100,7 +101,7 @@ export default function Leaderboard() {
                 {p.total_points}
               </td>
               <td className="p-2 border border-gray-700">
-                {p.average_points}
+                {getCurrentSeasonAverage(p).toFixed(2)}
               </td>
             </tr>
           ))}
