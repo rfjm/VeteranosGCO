@@ -43,6 +43,7 @@ export default function Games() {
   const [recentGames, setRecentGames] = useState([]);
   const [gameNotice, setGameNotice] = useState("");
   const [savingGame, setSavingGame] = useState(false);
+  const [endingTraining, setEndingTraining] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const hornRef = useRef(null);
   const scoreboardRef = useRef(null);
@@ -70,7 +71,9 @@ export default function Games() {
         .select("*")
       .order("date", { ascending: false });
       if (!error && data.length > 0) {
-        setSelectedTraining(data[0]);
+        setSelectedTraining(
+          data.find((training) => !training.completed_at) || data[0],
+        );
       }
     };
     fetchTrainings();
@@ -252,7 +255,34 @@ export default function Games() {
   };
 
   const endTraining = async () => {
-    if (!selectedTraining) return;
+    if (!selectedTraining || endingTraining) return;
+    if (selectedTraining.completed_at) {
+      alert("ℹ️ Este treino já foi finalizado.");
+      return;
+    }
+
+    setEndingTraining(true);
+
+    const { data: trainingStatus, error: statusError } = await supabase
+      .from("trainings")
+      .select("completed_at")
+      .eq("id", selectedTraining.id)
+      .single();
+
+    if (statusError) {
+      alert("Erro ao verificar o treino: " + statusError.message);
+      setEndingTraining(false);
+      return;
+    }
+    if (trainingStatus.completed_at) {
+      setSelectedTraining((current) => ({
+        ...current,
+        completed_at: trainingStatus.completed_at,
+      }));
+      alert("ℹ️ Este treino já foi finalizado.");
+      setEndingTraining(false);
+      return;
+    }
 
     const { data: allTeams, error: teamsErr } = await supabase
       .from("training_teams")
@@ -262,10 +292,12 @@ export default function Games() {
 
     if (teamsErr) {
       alert("Erro ao buscar equipas: " + teamsErr.message);
+      setEndingTraining(false);
       return;
     }
     if (!allTeams || allTeams.length < 2) {
       alert("⚠️ São necessárias pelo menos 2 equipas.");
+      setEndingTraining(false);
       return;
     }
 
@@ -276,6 +308,7 @@ export default function Games() {
 
     if (gamesErr) {
       alert("Erro ao buscar jogos: " + gamesErr.message);
+      setEndingTraining(false);
       return;
     }
 
@@ -306,25 +339,37 @@ export default function Games() {
       }
     }
 
-    const { error: deleteError } = await supabase
-      .from("training_teams")
-      .delete()
-      .eq("training_id", selectedTraining.id);
+    const completedAt = new Date().toISOString();
+    const { error: completionError } = await supabase
+      .from("trainings")
+      .update({ completed_at: completedAt })
+      .eq("id", selectedTraining.id)
+      .is("completed_at", null);
 
-    if (deleteError) {
-      alert("Os pontos foram atribuídos, mas ocorreu um erro ao remover as equipas: " + deleteError.message);
+    if (completionError) {
+      alert("Os pontos foram atribuídos, mas ocorreu um erro ao finalizar o treino: " + completionError.message);
+      setEndingTraining(false);
       return;
     }
 
-    setTeams([]);
+    setSelectedTraining((current) => ({ ...current, completed_at: completedAt }));
     setSelectedTeams([]);
-    setTeamStandings([]);
-    alert("✅ Pontos atribuídos e equipas removidas!");
+    setGameNotice("✅ Treino finalizado e resultado guardado no histórico.");
+    setEndingTraining(false);
+    alert("✅ Pontos atribuídos e treino guardado no histórico!");
   };
+
+  const trainingCompleted = Boolean(selectedTraining?.completed_at);
 
   return (
     <div className="p-6 max-w-6xl mx-auto bg-gray-900 text-white rounded-2xl shadow-lg">
       <h1 className="text-4xl font-bold mb-8 text-center">🎮 Jogos</h1>
+
+      {trainingCompleted && (
+        <p className="mb-6 rounded-lg border border-green-500 bg-green-950 p-4 text-center font-semibold text-green-100">
+          🏁 Este treino já foi finalizado. Consulta o resultado completo na página Treinos.
+        </p>
+      )}
 
       <div className="mb-8 grid gap-4 md:grid-cols-2">
         <div className="rounded-xl bg-gray-800 p-4">
@@ -367,7 +412,7 @@ export default function Games() {
       </div>
 
       {/* Teams with fixed colours */}
-      <h2 className="text-xl font-semibold mb-4">Escolhe 2 equipas:</h2>
+      {!trainingCompleted && <h2 className="text-xl font-semibold mb-4">Escolhe 2 equipas:</h2>}
       <div className="grid md:grid-cols-3 gap-4 mb-8">
         {teams.map((team) => {
           const style = getTeamStyle(team.team_number);
@@ -384,7 +429,7 @@ export default function Games() {
                 outline: isSelected ? "4px solid #22c55e" : "none",
                 outlineOffset: isSelected ? "4px" : "0",
               }}
-              onClick={() => toggleTeamSelection(team)}
+              onClick={() => !trainingCompleted && toggleTeamSelection(team)}
             >
               <h3 className="font-bold mb-2">Equipa {team.team_number} · {style.name}</h3>
               <button
@@ -411,7 +456,7 @@ export default function Games() {
       </div>
 
       {/* Timer + Scoreboard */}
-      {selectedTeams.length === 2 && (
+      {!trainingCompleted && selectedTeams.length === 2 && (
         <>
           <section
             ref={scoreboardRef}
@@ -511,11 +556,11 @@ export default function Games() {
       <div className="mt-8 border-t border-gray-700 pt-8 text-center">
         <button
           onClick={endTraining}
-          disabled={!isAdmin || !selectedTraining || teams.length < 2}
+          disabled={!isAdmin || !selectedTraining || teams.length < 2 || trainingCompleted || endingTraining}
           title={!isAdmin ? "Inicia sessão como administrador para finalizar o treino." : undefined}
           className="rounded bg-purple-600 px-6 py-3 text-xl hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isAdmin ? "🏁 Finalizar Treino" : "🔒 Finalizar Treino"}
+          {endingTraining ? "A finalizar…" : isAdmin ? "🏁 Finalizar Treino" : "🔒 Finalizar Treino"}
         </button>
       </div>
       <audio ref={hornRef} src={`${import.meta.env.BASE_URL}horn.mp3`} preload="auto" />

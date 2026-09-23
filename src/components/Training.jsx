@@ -3,6 +3,7 @@
   import { createBalancedTeams, getTeamAverage } from "../utils/teamGenerator";
   import { useAuth } from "../useAuth";
   import TrainingCalendar from "./TrainingCalendar";
+  import PracticeResults from "./PracticeResults";
   import { dateFromKey, dateKey } from "../utils/calendar";
   import {
     getPlayerTeamRating,
@@ -41,6 +42,9 @@
 
     // Teams held as arrays of FULL player objects [{id,name,total_points,...}]
     const [teams, setTeams] = useState([]);
+    const [teamRecords, setTeamRecords] = useState([]);
+    const [trainingGames, setTrainingGames] = useState([]);
+    const [loadingTrainingDetails, setLoadingTrainingDetails] = useState(false);
     const [choice12, setChoice12] = useState(""); // "2" or "3" for 12–14 players
     const [editMode, setEditMode] = useState(false);
 
@@ -51,9 +55,23 @@
         return;
       }
       const toObj = (id) => players.find((p) => p.id === id);
+      setTeamRecords(data || []);
       const hydrated = (data || []).map((row) => (row.players || []).map(toObj).filter(Boolean)) || [];
       setTeams(hydrated);
     }, [players]);
+
+    const fetchTrainingGames = useCallback(async (trainingId) => {
+      const { data, error } = await supabase
+        .from("games")
+        .select("id, team1, team2, team1_score, team2_score, winner, created_at")
+        .eq("training_id", trainingId)
+        .order("created_at", { ascending: true });
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      setTrainingGames(data || []);
+    }, []);
 
     useEffect(() => {
       fetchPlayers();
@@ -62,10 +80,17 @@
 
     useEffect(() => {
       if (selectedTraining && players.length) {
-        loadTeams(selectedTraining.id);
-        fetchAttendance(selectedTraining.id);
+        setLoadingTrainingDetails(true);
+        setTeams([]);
+        setTeamRecords([]);
+        setTrainingGames([]);
+        Promise.all([
+          loadTeams(selectedTraining.id),
+          fetchAttendance(selectedTraining.id),
+          fetchTrainingGames(selectedTraining.id),
+        ]).finally(() => setLoadingTrainingDetails(false));
       }
-    }, [selectedTraining, players, loadTeams]);
+    }, [selectedTraining, players, loadTeams, fetchTrainingGames]);
 
     const fetchPlayers = async () => {
       const { data, error } = await supabase.from("players").select("*").order("name");
@@ -114,6 +139,8 @@
           setSelectedTraining(null);
           setPresent([]);
           setTeams([]);
+          setTeamRecords([]);
+          setTrainingGames([]);
           setEditMode(false);
         }
         try {
@@ -137,6 +164,9 @@
     const availablePlayers = players.filter((player) => present.includes(player.id));
     const attendancePriority = prioritizeAvailablePlayers(availablePlayers);
     const selectedPlayerIds = attendancePriority.selected.map((player) => player.id);
+    const isCompleted = Boolean(selectedTraining?.completed_at) || (
+      trainingGames.length > 0 && teamRecords.length === 0
+    );
 
     const saveAttendance = async () => {
   if (!selectedTraining) {
@@ -318,7 +348,21 @@
         )}
 
         {/* Players + Generate Teams */}
-        {selectedTraining && (
+        {selectedTraining && loadingTrainingDetails && (
+          <p className="rounded-lg bg-gray-700 p-4 text-center text-gray-200">
+            ⏳ A carregar os dados do treino…
+          </p>
+        )}
+
+        {selectedTraining && !loadingTrainingDetails && isCompleted && (
+          <PracticeResults
+            games={trainingGames}
+            savedTeams={teamRecords}
+            players={players}
+          />
+        )}
+
+        {selectedTraining && !loadingTrainingDetails && !isCompleted && (
           <>
             <h2 className="text-xl font-semibold mb-2">👥 Jogadores</h2>
 
@@ -394,7 +438,7 @@
         )}
 
         {/* Teams + Bench */}
-        {teams.length > 0 && (
+        {!isCompleted && teams.length > 0 && (
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xl font-semibold">⚡ Equipas</h2>
