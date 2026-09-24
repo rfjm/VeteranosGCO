@@ -10,7 +10,8 @@ export const useCurrentSeasonTrainingTotal = () => {
       const { count, error } = await supabase
         .from("trainings")
         .select("id", { count: "exact", head: true })
-        .gte("date", CURRENT_SEASON_START_DATE);
+        .gte("date", CURRENT_SEASON_START_DATE)
+        .not("completed_at", "is", null);
 
       if (!error) setTotal(count || 0);
     };

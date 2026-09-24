@@ -131,6 +131,12 @@
     };
 
     const deleteTraining = async (id) => {
+      const training = trainings.find((item) => item.id === id);
+      if (training?.completed_at) {
+        setError("Um treino finalizado não pode ser apagado porque já atribuiu pontos.");
+        return;
+      }
+
       const { error } = await supabase.from("trainings").delete().eq("id", id);
       if (error) setError(error.message);
       else {
@@ -143,11 +149,7 @@
           setTrainingGames([]);
           setEditMode(false);
         }
-        try {
-          await supabase.rpc("recalculate_all_player_stats");
-        } catch {
-          // The training is still deleted if the optional stats refresh fails.
-        }
+        await fetchPlayers();
       }
     };
 
@@ -336,7 +338,7 @@
             <p>
               Treino selecionado: <strong>{dateFromKey(selectedTraining.date).toLocaleDateString("pt-PT")}</strong>
             </p>
-            {isAdmin && (
+            {isAdmin && !selectedTraining.completed_at && (
               <button
                 onClick={() => deleteTraining(selectedTraining.id)}
                 className="text-sm text-red-300 hover:text-red-200"
@@ -397,7 +399,7 @@
 
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button onClick={saveAttendance} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full sm:w-auto">
-                    Guardar Presenças
+                    Guardar Jogadores
                   </button>
                   <button onClick={generateTeams} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full sm:w-auto">
                     Gerar Equipas
@@ -411,6 +413,10 @@
                     </button>
                   )}
                 </div>
+
+                <p className="mt-2 text-sm text-gray-300">
+                  A presença só entra nas estatísticas quando o treino for finalizado.
+                </p>
 
                 {attendancePriority.waitlisted.length > 0 && (
                   <div className="mt-4 rounded-lg border border-orange-500 bg-orange-950 p-3">
