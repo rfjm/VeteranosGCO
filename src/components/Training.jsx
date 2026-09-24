@@ -8,6 +8,7 @@
   import {
     getPlayerTeamRating,
     prioritizeAvailablePlayers,
+    rankPlayersForTeamProtection,
   } from "../utils/attendancePriority";
 
   const TEAM_STYLES = [
@@ -244,7 +245,17 @@
         ...player,
         average_points: getPlayerTeamRating(player, selectedTraining.date),
       }));
-      const newTeams = createBalancedTeams(playersForBalancing, numberOfTeams);
+      const protectedRanking = rankPlayersForTeamProtection(selectedPlayers);
+      const protectedTopIds = protectedRanking.slice(0, 3).map((player) => player.id);
+      const protectedTopSet = new Set(protectedTopIds.map(String));
+      const protectedBottomIds = protectedRanking
+        .filter((player) => !protectedTopSet.has(String(player.id)))
+        .slice(-3)
+        .map((player) => player.id);
+      const newTeams = createBalancedTeams(playersForBalancing, numberOfTeams, {
+        protectedTopIds,
+        protectedBottomIds,
+      });
       if (!newTeams || newTeams.length === 0) return;
 
       setTeams(newTeams);

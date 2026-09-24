@@ -5,10 +5,25 @@ import {
   getCombinedAttendance,
   getCurrentSeasonAverage,
   getPlayerTeamRating,
+  rankPlayersForTeamProtection,
   getPreviousSeasonPoints,
   prioritizeAvailablePlayers,
   rankPlayersByPointsAndAttendance,
 } from "./attendancePriority.js";
+
+test("team protection ignores players without a current-season result", () => {
+  const players = [
+    { id: 1, name: "No games", total_points: 0, current_season_trainings: 0, previous_season_points: 100, previous_season_trainings: 10 },
+    { id: 2, name: "Lower historic rank", total_points: 1, current_season_trainings: 1, previous_season_points: 20, previous_season_trainings: 10 },
+    { id: 3, name: "Higher historic rank", total_points: 1, current_season_trainings: 1, previous_season_points: 30, previous_season_trainings: 10 },
+    { id: 4, name: "Best current average", total_points: 3, current_season_trainings: 1, previous_season_points: 1, previous_season_trainings: 10 },
+  ];
+
+  assert.deepEqual(
+    rankPlayersForTeamProtection(players).map((player) => player.id),
+    [4, 3, 2],
+  );
+});
 
 test("reads previous-season points without affecting current points", () => {
   const player = { previous_season_points: 109, total_points: 0 };

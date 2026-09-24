@@ -63,6 +63,29 @@ export const rankPlayersByPointsAndAttendance = (players) =>
     return String(first.name || "").localeCompare(String(second.name || ""), "pt");
   });
 
+export const rankPlayersForTeamProtection = (players) =>
+  [...players]
+    .filter(
+      (player) =>
+        getCurrentSeasonAttendance(player) > 0 &&
+        attendanceValue(player, "total_points") > 0,
+    )
+    .sort((first, second) => {
+      const currentAverageDifference =
+        getCurrentSeasonAverage(second) - getCurrentSeasonAverage(first);
+      if (currentAverageDifference !== 0) return currentAverageDifference;
+
+      const previousPointsDifference =
+        getPreviousSeasonPoints(second) - getPreviousSeasonPoints(first);
+      if (previousPointsDifference !== 0) return previousPointsDifference;
+
+      const previousAttendanceDifference =
+        getPreviousSeasonAttendance(second) - getPreviousSeasonAttendance(first);
+      if (previousAttendanceDifference !== 0) return previousAttendanceDifference;
+
+      return String(first.name || "").localeCompare(String(second.name || ""), "pt");
+    });
+
 export const prioritizeAvailablePlayers = (availablePlayers, limit = 18) => {
   const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
   const ranked = [...availablePlayers].sort((first, second) => {

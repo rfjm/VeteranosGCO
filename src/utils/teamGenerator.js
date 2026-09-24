@@ -44,25 +44,37 @@ const addThreePlayerGroup = (teams, group, numberOfTeams, extraTeam, random) => 
 
   // With two teams, three players cannot all be separated. A 2–1 split is
   // therefore the closest possible equivalent of the rule.
-  teams[0].push(randomizedGroup[0]);
-  teams[1].push(randomizedGroup[1]);
-  teams[extraTeam].push(randomizedGroup[2]);
+  randomizedGroup.forEach((player, index) => {
+    if (index < 2) teams[index].push(player);
+    else teams[extraTeam].push(player);
+  });
 };
 
-const buildCandidate = (rankedPlayers, numberOfTeams, random) => {
+const playerId = (player) => String(player.id);
+
+const buildCandidate = (
+  rankedPlayers,
+  numberOfTeams,
+  random,
+  protectedTop,
+  protectedBottom,
+) => {
   const teams = Array.from({ length: numberOfTeams }, () => []);
   const sizes = teamSizes(rankedPlayers.length, numberOfTeams, random);
-  const topThree = rankedPlayers.slice(0, 3);
-  const bottomThree = rankedPlayers.slice(-3);
-  const remaining = rankedPlayers.slice(3, -3);
+  const protectedIds = new Set(
+    [...protectedTop, ...protectedBottom].map(playerId),
+  );
+  const remaining = rankedPlayers.filter(
+    (player) => !protectedIds.has(playerId(player)),
+  );
 
   if (numberOfTeams === 3) {
-    addThreePlayerGroup(teams, topThree, numberOfTeams, 0, random);
-    addThreePlayerGroup(teams, bottomThree, numberOfTeams, 0, random);
+    addThreePlayerGroup(teams, protectedTop, numberOfTeams, 0, random);
+    addThreePlayerGroup(teams, protectedBottom, numberOfTeams, 0, random);
   } else {
     const topExtraTeam = random() < 0.5 ? 0 : 1;
-    addThreePlayerGroup(teams, topThree, numberOfTeams, topExtraTeam, random);
-    addThreePlayerGroup(teams, bottomThree, numberOfTeams, 1 - topExtraTeam, random);
+    addThreePlayerGroup(teams, protectedTop, numberOfTeams, topExtraTeam, random);
+    addThreePlayerGroup(teams, protectedBottom, numberOfTeams, 1 - topExtraTeam, random);
   }
 
   const availableSlots = [];
@@ -83,7 +95,12 @@ const buildCandidate = (rankedPlayers, numberOfTeams, random) => {
 export function createBalancedTeams(
   players,
   numberOfTeams,
-  { random = Math.random, attempts = 2000 } = {},
+  {
+    random = Math.random,
+    attempts = 2000,
+    protectedTopIds,
+    protectedBottomIds,
+  } = {},
 ) {
   if (![2, 3].includes(numberOfTeams)) {
     throw new Error("Only two or three teams are supported.");
@@ -97,12 +114,30 @@ export function createBalancedTeams(
   const rankedPlayers = shuffle(players, random).sort(
     (a, b) => averagePoints(b) - averagePoints(a),
   );
+  const byId = new Map(rankedPlayers.map((player) => [playerId(player), player]));
+  const requestedTop = protectedTopIds?.map(String);
+  const requestedBottom = protectedBottomIds?.map(String);
+  const protectedTop = requestedTop
+    ? requestedTop.map((id) => byId.get(id)).filter(Boolean)
+    : rankedPlayers.slice(0, 3);
+  const topIds = new Set(protectedTop.map(playerId));
+  const protectedBottom = requestedBottom
+    ? requestedBottom
+        .map((id) => byId.get(id))
+        .filter((player) => player && !topIds.has(playerId(player)))
+    : rankedPlayers.slice(-3);
   let bestScore = Number.POSITIVE_INFINITY;
   let bestCandidates = [];
   const tolerance = 0.05;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const candidate = buildCandidate(rankedPlayers, numberOfTeams, random);
+    const candidate = buildCandidate(
+      rankedPlayers,
+      numberOfTeams,
+      random,
+      protectedTop,
+      protectedBottom,
+    );
     const score = balanceScore(candidate);
 
     if (score < bestScore - tolerance) {

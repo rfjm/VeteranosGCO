@@ -62,3 +62,23 @@ test("balances teams using average points rather than total points", () => {
     players.map((player) => player.id),
   );
 });
+
+test("uses explicit ranking groups for protection while balancing by average", () => {
+  const protectedTopIds = [1, 2, 3];
+  const protectedBottomIds = [10, 11, 12];
+  const teams = createBalancedTeams(players, 3, {
+    random: seededRandom(4),
+    attempts: 1000,
+    protectedTopIds,
+    protectedBottomIds,
+  });
+
+  assert.deepEqual(
+    teams.map((team) => countGroupMembers(team, new Set(protectedTopIds))),
+    [1, 1, 1],
+  );
+  assert.deepEqual(
+    teams.map((team) => countGroupMembers(team, new Set(protectedBottomIds))),
+    [1, 1, 1],
+  );
+});
