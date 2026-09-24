@@ -3,8 +3,9 @@
 
 do $$
 declare
-  practice_id uuid;
-  hugo_id uuid;
+  practice_id public.trainings.id%type;
+  hugo_id public.players.id%type;
+  white_team_member_id text := '0312743e-1dd1-487d-a122-7f893a1f7729';
 begin
   select id into practice_id
   from public.trainings
@@ -24,23 +25,24 @@ begin
   if not exists (
     select 1
     from public.training_attendance
-    where training_id = practice_id and player_id = hugo_id
+    where training_id::text = practice_id::text
+      and player_id::text = hugo_id::text
   ) then
     insert into public.training_attendance (training_id, player_id)
-    values (practice_id, hugo_id);
+    values (practice_id::text, hugo_id::text);
   end if;
 
   update public.games
-  set team1 = array_append(team1, hugo_id)
-  where training_id = practice_id
-    and team1 @> array['0312743e-1dd1-487d-a122-7f893a1f7729'::uuid]
-    and not team1 @> array[hugo_id];
+  set team1 = array_append(team1, hugo_id::text)
+  where training_id::text = practice_id::text
+    and team1 @> array[white_team_member_id]
+    and not team1 @> array[hugo_id::text];
 
   update public.games
-  set team2 = array_append(team2, hugo_id)
-  where training_id = practice_id
-    and team2 @> array['0312743e-1dd1-487d-a122-7f893a1f7729'::uuid]
-    and not team2 @> array[hugo_id];
+  set team2 = array_append(team2, hugo_id::text)
+  where training_id::text = practice_id::text
+    and team2 @> array[white_team_member_id]
+    and not team2 @> array[hugo_id::text];
 
   update public.players
   set
