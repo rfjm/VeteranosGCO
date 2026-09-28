@@ -5,11 +5,29 @@ import {
   getCombinedAttendance,
   getCurrentSeasonAverage,
   getPlayerTeamRating,
+  filterPlayersForRanking,
   rankPlayersForTeamProtection,
   getPreviousSeasonPoints,
   prioritizeAvailablePlayers,
   rankPlayersByPointsAndAttendance,
 } from "./attendancePriority.js";
+
+test("ranking hides inactive players until previous-season data is shown", () => {
+  const players = [
+    { id: 1, current_season_trainings: 1, previous_season_trainings: 0 },
+    { id: 2, current_season_trainings: 0, previous_season_trainings: 5 },
+    { id: 3, current_season_trainings: 0, previous_season_trainings: 0 },
+  ];
+
+  assert.deepEqual(
+    filterPlayersForRanking(players).map((player) => player.id),
+    [1],
+  );
+  assert.deepEqual(
+    filterPlayersForRanking(players, true).map((player) => player.id),
+    [1, 2],
+  );
+});
 
 test("team protection ignores players without a current-season result", () => {
   const players = [

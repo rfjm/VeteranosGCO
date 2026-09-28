@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import {
+  filterPlayersForRanking,
   formatAttendanceRecord,
   getCurrentSeasonAverage,
   getCurrentSeasonAttendance,
@@ -47,6 +48,8 @@ export default function Leaderboard() {
   const error = playersError || monthError;
   if (error) return <p className="p-4 text-red-400">Erro: {error}</p>;
 
+  const visiblePlayers = filterPlayersForRanking(players, showPreviousSeason);
+
   return (
     <div className="mx-auto max-w-5xl rounded-2xl bg-gray-800 p-4 text-white shadow-lg sm:p-6">
       <h1 className="mb-4 text-center text-3xl font-bold">🏆 Ranking</h1>
@@ -80,7 +83,7 @@ export default function Leaderboard() {
             </tr>
           </thead>
           <tbody>
-            {players.map((player, index) => {
+            {visiblePlayers.map((player, index) => {
               const monthlyStats = getPlayerMonthlyStats(statsByPlayer, player.id);
 
               return (

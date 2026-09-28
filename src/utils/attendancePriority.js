@@ -63,6 +63,13 @@ export const rankPlayersByPointsAndAttendance = (players) =>
     return String(first.name || "").localeCompare(String(second.name || ""), "pt");
   });
 
+export const filterPlayersForRanking = (players, includePreviousSeason = false) =>
+  players.filter(
+    (player) =>
+      getCurrentSeasonAttendance(player) > 0 ||
+      (includePreviousSeason && getPreviousSeasonAttendance(player) > 0),
+  );
+
 export const rankPlayersForTeamProtection = (players) =>
   [...players]
     .filter(
