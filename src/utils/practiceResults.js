@@ -83,3 +83,17 @@ export const buildPracticeSummary = (games = [], savedTeams = []) => {
     ranking: calculateTeamRanking(teams, games),
   };
 };
+
+export const getPracticePointsByPlayer = (games = [], savedTeams = []) => {
+  const { ranking } = buildPracticeSummary(games, savedTeams);
+  const pointsByPlace = ranking.length === 2 ? [3, 2] : [3, 2, 1];
+  const pointsByPlayer = {};
+
+  ranking.slice(0, 3).forEach((team, index) => {
+    (team.players || []).forEach((playerId) => {
+      pointsByPlayer[String(playerId)] = pointsByPlace[index] || 0;
+    });
+  });
+
+  return pointsByPlayer;
+};

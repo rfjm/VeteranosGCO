@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBalancedTeams, getTeamAverage } from "./teamGenerator.js";
+import {
+  countRepeatedTeammatePairs,
+  createBalancedTeams,
+  getTeamAverage,
+} from "./teamGenerator.js";
 
 const players = Array.from({ length: 12 }, (_, index) => ({
   id: index + 1,
@@ -81,4 +85,19 @@ test("uses explicit ranking groups for protection while balancing by average", (
     teams.map((team) => countGroupMembers(team, new Set(protectedBottomIds))),
     [1, 1, 1],
   );
+});
+
+test("prefers candidates with fewer repeated teammate pairs", () => {
+  const previousTeams = [
+    { players: [1, 2, 3, 4] },
+    { players: [5, 6, 7, 8] },
+    { players: [9, 10, 11, 12] },
+  ];
+  const teams = createBalancedTeams(players, 3, {
+    random: seededRandom(5),
+    attempts: 3000,
+    previousTeams,
+  });
+
+  assert.ok(countRepeatedTeammatePairs(teams, previousTeams) <= 3);
 });

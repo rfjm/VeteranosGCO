@@ -6,10 +6,15 @@
   import PracticeResults from "./PracticeResults";
   import { dateFromKey, dateKey } from "../utils/calendar";
   import {
+    getPracticePointsByPlayer,
+    inferPracticeTeams,
+  } from "../utils/practiceResults";
+  import {
     CURRENT_SEASON_START_DATE,
+    getCurrentSeasonAttendance,
     getPlayerTeamRating,
     prioritizeAvailablePlayers,
-    rankPlayersForTeamProtection,
+    selectPlayersForTeamProtection,
   } from "../utils/attendancePriority";
 
   const TEAM_STYLES = [
@@ -46,6 +51,8 @@
     const [teams, setTeams] = useState([]);
     const [teamRecords, setTeamRecords] = useState([]);
     const [trainingGames, setTrainingGames] = useState([]);
+    const [previousPracticeTeams, setPreviousPracticeTeams] = useState([]);
+    const [latestPracticePoints, setLatestPracticePoints] = useState({});
     const [loadingTrainingDetails, setLoadingTrainingDetails] = useState(false);
     const [choice12, setChoice12] = useState(""); // "2" or "3" for 12–14 players
     const [editMode, setEditMode] = useState(false);
@@ -83,6 +90,54 @@
       setTrainingGames(data || []);
     }, []);
 
+    const loadPreviousPracticeContext = useCallback(async (training) => {
+      const { data: previousTraining, error: trainingError } = await supabase
+        .from("trainings")
+        .select("id, date")
+        .gte("date", CURRENT_SEASON_START_DATE)
+        .lt("date", String(training.date).slice(0, 10))
+        .not("completed_at", "is", null)
+        .order("date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (trainingError) {
+        setError(trainingError.message);
+        return;
+      }
+      if (!previousTraining) {
+        setPreviousPracticeTeams([]);
+        setLatestPracticePoints({});
+        return;
+      }
+
+      const [teamsResult, gamesResult] = await Promise.all([
+        supabase
+          .from("training_teams")
+          .select("team_number, players")
+          .eq("training_id", previousTraining.id)
+          .order("team_number"),
+        supabase
+          .from("games")
+          .select("id, team1, team2, team1_score, team2_score, winner, created_at")
+          .eq("training_id", previousTraining.id)
+          .order("created_at"),
+      ]);
+
+      const contextError = teamsResult.error || gamesResult.error;
+      if (contextError) {
+        setError(contextError.message);
+        return;
+      }
+
+      const games = gamesResult.data || [];
+      const previousTeams = teamsResult.data?.length
+        ? teamsResult.data
+        : inferPracticeTeams(games);
+      setPreviousPracticeTeams(previousTeams);
+      setLatestPracticePoints(getPracticePointsByPlayer(games, previousTeams));
+    }, []);
+
     useEffect(() => {
       fetchPlayers();
       fetchTrainings();
@@ -94,13 +149,22 @@
         setTeams([]);
         setTeamRecords([]);
         setTrainingGames([]);
+        setPreviousPracticeTeams([]);
+        setLatestPracticePoints({});
         Promise.all([
           loadTeams(selectedTraining.id, selectedTraining.date),
           fetchAttendance(selectedTraining.id),
           fetchTrainingGames(selectedTraining.id),
+          loadPreviousPracticeContext(selectedTraining),
         ]).finally(() => setLoadingTrainingDetails(false));
       }
-    }, [selectedTraining, players, loadTeams, fetchTrainingGames]);
+    }, [
+      selectedTraining,
+      players,
+      loadTeams,
+      fetchTrainingGames,
+      loadPreviousPracticeContext,
+    ]);
 
     const fetchPlayers = async () => {
       const { data, error } = await supabase.from("players").select("*").order("name");
@@ -180,12 +244,11 @@
     const availablePlayers = players.filter((player) => present.includes(player.id));
     const attendancePriority = prioritizeAvailablePlayers(availablePlayers);
     const selectedPlayerIds = attendancePriority.selected.map((player) => player.id);
-    const protectedRanking = rankPlayersForTeamProtection(attendancePriority.selected);
-    const protectedTopPlayers = protectedRanking.slice(0, 3);
-    const protectedTopIds = new Set(protectedTopPlayers.map((player) => String(player.id)));
-    const protectedBottomPlayers = protectedRanking
-      .filter((player) => !protectedTopIds.has(String(player.id)))
-      .slice(-3);
+    const { top: protectedTopPlayers, bottom: protectedBottomPlayers } =
+      selectPlayersForTeamProtection(
+        attendancePriority.selected,
+        latestPracticePoints,
+      );
     const isCompleted = Boolean(selectedTraining?.completed_at) || (
       trainingGames.length > 0 && teamRecords.length === 0
     );
@@ -267,6 +330,7 @@
       const newTeams = createBalancedTeams(playersForBalancing, numberOfTeams, {
         protectedTopIds: protectedTopPlayers.map((player) => player.id),
         protectedBottomIds: protectedBottomPlayers.map((player) => player.id),
+        previousTeams: previousPracticeTeams,
       });
       if (!newTeams || newTeams.length === 0) return;
 
@@ -491,25 +555,23 @@
               <div className="mb-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-green-500 bg-green-950 p-3">
                   <h3 className="font-semibold text-green-200">⬆️ Top 3 protegidos</h3>
-                  <p className="mt-1 text-sm text-green-100">
-                    {protectedTopPlayers
-                      .map(
-                        (player) =>
-                          `${player.name} (${getPlayerTeamRating(player, selectedTraining?.date).toFixed(2)})`,
-                      )
-                      .join(", ") || "Sem jogadores elegíveis"}
-                  </p>
+                  <ul className="mt-1 space-y-1 text-sm text-green-100">
+                    {protectedTopPlayers.map((player) => (
+                      <li key={player.id}>
+                        {player.name} — média {getPlayerTeamRating(player, selectedTraining?.date).toFixed(2)} · {getCurrentSeasonAttendance(player)} treinos · último {latestPracticePoints[String(player.id)] || 0} pts
+                      </li>
+                    ))}
+                  </ul>
                 </div>
                 <div className="rounded-lg border border-orange-500 bg-orange-950 p-3">
                   <h3 className="font-semibold text-orange-200">⬇️ Bottom 3 protegidos</h3>
-                  <p className="mt-1 text-sm text-orange-100">
-                    {protectedBottomPlayers
-                      .map(
-                        (player) =>
-                          `${player.name} (${getPlayerTeamRating(player, selectedTraining?.date).toFixed(2)})`,
-                      )
-                      .join(", ") || "Sem jogadores elegíveis"}
-                  </p>
+                  <ul className="mt-1 space-y-1 text-sm text-orange-100">
+                    {protectedBottomPlayers.map((player) => (
+                      <li key={player.id}>
+                        {player.name} — média {getPlayerTeamRating(player, selectedTraining?.date).toFixed(2)} · {getCurrentSeasonAttendance(player)} treinos · último {latestPracticePoints[String(player.id)] || 0} pts
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             )}

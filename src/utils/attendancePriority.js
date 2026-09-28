@@ -70,28 +70,66 @@ export const filterPlayersForRanking = (players, includePreviousSeason = false) 
       (includePreviousSeason && getPreviousSeasonAttendance(player) > 0),
   );
 
-export const rankPlayersForTeamProtection = (players) =>
-  [...players]
-    .filter(
-      (player) =>
-        getCurrentSeasonAttendance(player) > 0 &&
-        attendanceValue(player, "total_points") > 0,
-    )
+const latestPracticePoints = (pointsByPlayer, player) =>
+  attendanceValue(pointsByPlayer, String(player.id));
+
+const compareCommonProtectionTies = (
+  first,
+  second,
+  pointsByPlayer,
+  direction,
+) => {
+  const attendanceDifference =
+    getCurrentSeasonAttendance(second) - getCurrentSeasonAttendance(first);
+  if (attendanceDifference !== 0) return attendanceDifference;
+
+  const latestPointsDifference =
+    latestPracticePoints(pointsByPlayer, second) -
+    latestPracticePoints(pointsByPlayer, first);
+  if (latestPointsDifference !== 0) return latestPointsDifference * direction;
+
+  const previousPointsDifference =
+    getPreviousSeasonPoints(second) - getPreviousSeasonPoints(first);
+  if (previousPointsDifference !== 0) return previousPointsDifference * direction;
+
+  const previousAttendanceDifference =
+    getPreviousSeasonAttendance(second) - getPreviousSeasonAttendance(first);
+  if (previousAttendanceDifference !== 0) return previousAttendanceDifference;
+
+  return String(first.name || "").localeCompare(String(second.name || ""), "pt");
+};
+
+export const selectPlayersForTeamProtection = (players, pointsByPlayer = {}) => {
+  const eligible = players.filter(
+    (player) =>
+      getCurrentSeasonAttendance(player) > 0 &&
+      attendanceValue(player, "total_points") > 0,
+  );
+  const top = [...eligible]
     .sort((first, second) => {
-      const currentAverageDifference =
+      const averageDifference =
         getCurrentSeasonAverage(second) - getCurrentSeasonAverage(first);
-      if (currentAverageDifference !== 0) return currentAverageDifference;
+      return (
+        averageDifference ||
+        compareCommonProtectionTies(first, second, pointsByPlayer, 1)
+      );
+    })
+    .slice(0, 3);
+  const topIds = new Set(top.map((player) => String(player.id)));
+  const bottom = eligible
+    .filter((player) => !topIds.has(String(player.id)))
+    .sort((first, second) => {
+      const averageDifference =
+        getCurrentSeasonAverage(first) - getCurrentSeasonAverage(second);
+      return (
+        averageDifference ||
+        compareCommonProtectionTies(first, second, pointsByPlayer, -1)
+      );
+    })
+    .slice(0, 3);
 
-      const previousPointsDifference =
-        getPreviousSeasonPoints(second) - getPreviousSeasonPoints(first);
-      if (previousPointsDifference !== 0) return previousPointsDifference;
-
-      const previousAttendanceDifference =
-        getPreviousSeasonAttendance(second) - getPreviousSeasonAttendance(first);
-      if (previousAttendanceDifference !== 0) return previousAttendanceDifference;
-
-      return String(first.name || "").localeCompare(String(second.name || ""), "pt");
-    });
+  return { top, bottom };
+};
 
 export const prioritizeAvailablePlayers = (availablePlayers, limit = 18) => {
   const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));

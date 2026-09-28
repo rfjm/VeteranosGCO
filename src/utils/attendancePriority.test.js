@@ -6,7 +6,7 @@ import {
   getCurrentSeasonAverage,
   getPlayerTeamRating,
   filterPlayersForRanking,
-  rankPlayersForTeamProtection,
+  selectPlayersForTeamProtection,
   getPreviousSeasonPoints,
   prioritizeAvailablePlayers,
   rankPlayersByPointsAndAttendance,
@@ -29,17 +29,32 @@ test("ranking hides inactive players until previous-season data is shown", () =>
   );
 });
 
-test("team protection ignores players without a current-season result", () => {
+test("team protection uses attendance and latest result to resolve equal averages", () => {
   const players = [
-    { id: 1, name: "No games", total_points: 0, current_season_trainings: 0, previous_season_points: 100, previous_season_trainings: 10 },
-    { id: 2, name: "Lower historic rank", total_points: 1, current_season_trainings: 1, previous_season_points: 20, previous_season_trainings: 10 },
-    { id: 3, name: "Higher historic rank", total_points: 1, current_season_trainings: 1, previous_season_points: 30, previous_season_trainings: 10 },
-    { id: 4, name: "Best current average", total_points: 3, current_season_trainings: 1, previous_season_points: 1, previous_season_trainings: 10 },
+    { id: 1, name: "No games", total_points: 0, current_season_trainings: 0 },
+    { id: 2, name: "More attendance", total_points: 6, current_season_trainings: 2 },
+    { id: 3, name: "Latest winner", total_points: 3, current_season_trainings: 1 },
+    { id: 4, name: "Latest third", total_points: 3, current_season_trainings: 1 },
+    { id: 5, name: "Low frequent", total_points: 2, current_season_trainings: 2 },
+    { id: 6, name: "Low occasional", total_points: 1, current_season_trainings: 1 },
+    { id: 7, name: "Middle", total_points: 2, current_season_trainings: 1 },
   ];
+  const protectedPlayers = selectPlayersForTeamProtection(players, {
+    2: 1,
+    3: 3,
+    4: 1,
+    5: 1,
+    6: 1,
+    7: 2,
+  });
 
   assert.deepEqual(
-    rankPlayersForTeamProtection(players).map((player) => player.id),
-    [4, 3, 2],
+    protectedPlayers.top.map((player) => player.id),
+    [2, 3, 4],
+  );
+  assert.deepEqual(
+    protectedPlayers.bottom.map((player) => player.id),
+    [5, 6, 7],
   );
 });
 

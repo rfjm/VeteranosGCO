@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildPracticeRounds,
   buildPracticeSummary,
+  getPracticePointsByPlayer,
   inferPracticeTeams,
 } from "./practiceResults.js";
 
@@ -73,4 +74,21 @@ test("calculates the final totals across every round", () => {
   assert.equal(summary.ranking[0].team_number, 2);
   assert.equal(summary.ranking[0].wins, 1);
   assert.equal(summary.ranking[0].pointsScored, 19);
+});
+
+test("returns the points awarded to every player in a completed practice", () => {
+  const games = [
+    game(1, 2, 10, 8),
+    game(1, 3, 10, 7),
+    game(2, 3, 9, 6),
+  ];
+
+  assert.deepEqual(getPracticePointsByPlayer(games, teams), {
+    1: 3,
+    2: 3,
+    3: 2,
+    4: 2,
+    5: 1,
+    6: 1,
+  });
 });

@@ -34,6 +34,34 @@ const balanceScore = (teams) => {
   return Math.max(...averages) - Math.min(...averages);
 };
 
+const teammatePairKey = (firstId, secondId) =>
+  [String(firstId), String(secondId)].sort().join("|");
+
+export const countRepeatedTeammatePairs = (teams, previousTeams = []) => {
+  const previousPairs = new Set();
+
+  previousTeams.forEach((team) => {
+    const players = team.players || team;
+    for (let first = 0; first < players.length; first += 1) {
+      for (let second = first + 1; second < players.length; second += 1) {
+        previousPairs.add(teammatePairKey(players[first], players[second]));
+      }
+    }
+  });
+
+  return teams.reduce((repeats, team) => {
+    let teamRepeats = 0;
+    for (let first = 0; first < team.length; first += 1) {
+      for (let second = first + 1; second < team.length; second += 1) {
+        if (previousPairs.has(teammatePairKey(team[first].id, team[second].id))) {
+          teamRepeats += 1;
+        }
+      }
+    }
+    return repeats + teamRepeats;
+  }, 0);
+};
+
 const addThreePlayerGroup = (teams, group, numberOfTeams, extraTeam, random) => {
   const randomizedGroup = shuffle(group, random);
 
@@ -100,6 +128,7 @@ export function createBalancedTeams(
     attempts = 2000,
     protectedTopIds,
     protectedBottomIds,
+    previousTeams = [],
   } = {},
 ) {
   if (![2, 3].includes(numberOfTeams)) {
@@ -127,6 +156,7 @@ export function createBalancedTeams(
         .filter((player) => player && !topIds.has(playerId(player)))
     : rankedPlayers.slice(-3);
   let bestScore = Number.POSITIVE_INFINITY;
+  let bestRepeatCount = Number.POSITIVE_INFINITY;
   let bestCandidates = [];
   const tolerance = 0.05;
 
@@ -139,12 +169,19 @@ export function createBalancedTeams(
       protectedBottom,
     );
     const score = balanceScore(candidate);
+    const repeatCount = countRepeatedTeammatePairs(candidate, previousTeams);
 
     if (score < bestScore - tolerance) {
       bestScore = score;
+      bestRepeatCount = repeatCount;
       bestCandidates = [candidate];
     } else if (score <= bestScore + tolerance) {
-      bestCandidates.push(candidate);
+      if (repeatCount < bestRepeatCount) {
+        bestRepeatCount = repeatCount;
+        bestCandidates = [candidate];
+      } else if (repeatCount === bestRepeatCount) {
+        bestCandidates.push(candidate);
+      }
     }
   }
 
