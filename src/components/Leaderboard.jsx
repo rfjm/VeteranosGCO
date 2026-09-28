@@ -68,7 +68,9 @@ export default function Leaderboard() {
         <table className="w-full min-w-[860px] table-auto border-collapse overflow-hidden rounded">
           <thead>
             <tr className="bg-gray-700 text-gray-200">
-              <th className="border border-gray-600 p-2">Nome</th>
+              <th className="sticky left-0 z-20 border border-gray-600 bg-gray-700 p-2 shadow-[2px_0_4px_rgba(0,0,0,0.35)]">
+                Nome
+              </th>
               <th className="border border-gray-600 p-2">Treinos no mês</th>
               <th className="border border-gray-600 p-2">Pontos do mês</th>
               <th className="border border-gray-600 p-2">Treinos na época</th>
@@ -91,7 +93,11 @@ export default function Leaderboard() {
                   key={player.id}
                   className={`${index % 2 === 0 ? "bg-gray-900" : "bg-gray-800"} text-center`}
                 >
-                  <td className="border border-gray-700 p-2 font-medium">
+                  <td
+                    className={`sticky left-0 z-10 border border-gray-700 p-2 font-medium shadow-[2px_0_4px_rgba(0,0,0,0.35)] ${
+                      index % 2 === 0 ? "bg-gray-900" : "bg-gray-800"
+                    }`}
+                  >
                     {player.name}
                   </td>
                   <td className="border border-gray-700 p-2">
