@@ -1,11 +1,18 @@
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Navigate, Routes, Route } from "react-router-dom";
 import Layout from "./Layout";
-import Home from "./components/Home";
 import Players from "./components/Players";
 import Training from "./components/Training";
 import Leaderboard from "./components/Leaderboard";
 import Games from "./components/Games";
 import AuthProvider from "./AuthProvider";
+import { useAuth } from "./useAuth";
+
+function AdminPlayersRoute() {
+  const { isAdmin, loading } = useAuth();
+
+  if (loading) return <p className="p-4 text-white">⏳ A carregar...</p>;
+  return isAdmin ? <Players /> : <Navigate to="/" replace />;
+}
 
 export default function App() {
   return (
@@ -13,8 +20,8 @@ export default function App() {
       <HashRouter>
         <Layout>
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/players" element={<Players />} />
+            <Route path="/" element={<Leaderboard />} />
+            <Route path="/players" element={<AdminPlayersRoute />} />
             <Route path="/training" element={<Training />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/games" element={<Games />} />
