@@ -50,13 +50,21 @@
     const [choice12, setChoice12] = useState(""); // "2" or "3" for 12–14 players
     const [editMode, setEditMode] = useState(false);
 
-    const loadTeams = useCallback(async (trainingId) => {
+    const loadTeams = useCallback(async (trainingId, trainingDate) => {
       const { data, error } = await supabase.from("training_teams").select("*").eq("training_id", trainingId).order("team_number");
       if (error) {
         setError(error.message);
         return;
       }
-      const toObj = (id) => players.find((p) => p.id === id);
+      const toObj = (id) => {
+        const player = players.find((item) => item.id === id);
+        return player
+          ? {
+              ...player,
+              average_points: getPlayerTeamRating(player, trainingDate),
+            }
+          : null;
+      };
       setTeamRecords(data || []);
       const hydrated = (data || []).map((row) => (row.players || []).map(toObj).filter(Boolean)) || [];
       setTeams(hydrated);
@@ -87,7 +95,7 @@
         setTeamRecords([]);
         setTrainingGames([]);
         Promise.all([
-          loadTeams(selectedTraining.id),
+          loadTeams(selectedTraining.id, selectedTraining.date),
           fetchAttendance(selectedTraining.id),
           fetchTrainingGames(selectedTraining.id),
         ]).finally(() => setLoadingTrainingDetails(false));
@@ -172,6 +180,12 @@
     const availablePlayers = players.filter((player) => present.includes(player.id));
     const attendancePriority = prioritizeAvailablePlayers(availablePlayers);
     const selectedPlayerIds = attendancePriority.selected.map((player) => player.id);
+    const protectedRanking = rankPlayersForTeamProtection(attendancePriority.selected);
+    const protectedTopPlayers = protectedRanking.slice(0, 3);
+    const protectedTopIds = new Set(protectedTopPlayers.map((player) => String(player.id)));
+    const protectedBottomPlayers = protectedRanking
+      .filter((player) => !protectedTopIds.has(String(player.id)))
+      .slice(-3);
     const isCompleted = Boolean(selectedTraining?.completed_at) || (
       trainingGames.length > 0 && teamRecords.length === 0
     );
@@ -250,16 +264,9 @@
         ...player,
         average_points: getPlayerTeamRating(player, selectedTraining.date),
       }));
-      const protectedRanking = rankPlayersForTeamProtection(selectedPlayers);
-      const protectedTopIds = protectedRanking.slice(0, 3).map((player) => player.id);
-      const protectedTopSet = new Set(protectedTopIds.map(String));
-      const protectedBottomIds = protectedRanking
-        .filter((player) => !protectedTopSet.has(String(player.id)))
-        .slice(-3)
-        .map((player) => player.id);
       const newTeams = createBalancedTeams(playersForBalancing, numberOfTeams, {
-        protectedTopIds,
-        protectedBottomIds,
+        protectedTopIds: protectedTopPlayers.map((player) => player.id),
+        protectedBottomIds: protectedBottomPlayers.map((player) => player.id),
       });
       if (!newTeams || newTeams.length === 0) return;
 
@@ -290,9 +297,13 @@
     const addPlayerToTeam = (playerId, teamIdx) => {
       const player = players.find((p) => p.id === playerId);
       if (!player) return;
+      const ratedPlayer = {
+        ...player,
+        average_points: getPlayerTeamRating(player, selectedTraining?.date),
+      };
       setTeams((prev) => {
         if (prev[teamIdx].some((x) => x.id === playerId)) return prev;
-        return prev.map((team, i) => (i === teamIdx ? [...team, player] : team));
+        return prev.map((team, i) => (i === teamIdx ? [...team, ratedPlayer] : team));
       });
     };
 
@@ -475,6 +486,33 @@
                 </div>
               )}
             </div>
+
+            {isAdmin && (protectedTopPlayers.length > 0 || protectedBottomPlayers.length > 0) && (
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-green-500 bg-green-950 p-3">
+                  <h3 className="font-semibold text-green-200">⬆️ Top 3 protegidos</h3>
+                  <p className="mt-1 text-sm text-green-100">
+                    {protectedTopPlayers
+                      .map(
+                        (player) =>
+                          `${player.name} (${getPlayerTeamRating(player, selectedTraining?.date).toFixed(2)})`,
+                      )
+                      .join(", ") || "Sem jogadores elegíveis"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-orange-500 bg-orange-950 p-3">
+                  <h3 className="font-semibold text-orange-200">⬇️ Bottom 3 protegidos</h3>
+                  <p className="mt-1 text-sm text-orange-100">
+                    {protectedBottomPlayers
+                      .map(
+                        (player) =>
+                          `${player.name} (${getPlayerTeamRating(player, selectedTraining?.date).toFixed(2)})`,
+                      )
+                      .join(", ") || "Sem jogadores elegíveis"}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {teams.map((team, idx) => {
