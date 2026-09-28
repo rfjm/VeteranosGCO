@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import { calculateTeamRanking } from "../utils/teamRanking";
+import { CURRENT_SEASON_START_DATE } from "../utils/attendancePriority";
 import { useAuth } from "../useAuth";
 import {
   clampGameDuration,
@@ -69,7 +70,8 @@ export default function Games() {
       const { data, error } = await supabase
         .from("trainings")
         .select("*")
-      .order("date", { ascending: false });
+        .gte("date", CURRENT_SEASON_START_DATE)
+        .order("date", { ascending: false });
       if (!error && data.length > 0) {
         setSelectedTraining(
           data.find((training) => !training.completed_at) || data[0],

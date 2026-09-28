@@ -6,6 +6,7 @@
   import PracticeResults from "./PracticeResults";
   import { dateFromKey, dateKey } from "../utils/calendar";
   import {
+    CURRENT_SEASON_START_DATE,
     getPlayerTeamRating,
     prioritizeAvailablePlayers,
     rankPlayersForTeamProtection,
@@ -100,7 +101,11 @@
     };
 
     const fetchTrainings = async () => {
-      const { data, error } = await supabase.from("trainings").select("*").order("date", { ascending: false });
+      const { data, error } = await supabase
+        .from("trainings")
+        .select("*")
+        .gte("date", CURRENT_SEASON_START_DATE)
+        .order("date", { ascending: false });
       if (error) setError(error.message);
       else setTrainings(data || []);
     };
