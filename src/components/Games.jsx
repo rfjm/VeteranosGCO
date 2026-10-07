@@ -139,17 +139,22 @@ export default function Games() {
     }
   }, [selectedTraining, fetchTeams, fetchGameSummary]);
 
-  // Start the audio one second early so its audible horn lines up with 00:00.
+  // Start the audio halfway between 00:01 and 00:00.
   useEffect(() => {
     if (!running || timer !== 1 || hornStartedRef.current) return;
 
-    hornStartedRef.current = true;
-    if (hornRef.current) {
-      hornRef.current.currentTime = 0;
-      hornRef.current.play().catch(() => {
-        console.warn("⚠️ Horn blocked until user interaction.");
-      });
-    }
+    const hornTimeout = window.setTimeout(() => {
+      if (hornStartedRef.current) return;
+      hornStartedRef.current = true;
+      if (hornRef.current) {
+        hornRef.current.currentTime = 0;
+        hornRef.current.play().catch(() => {
+          console.warn("⚠️ Horn blocked until user interaction.");
+        });
+      }
+    }, 500);
+
+    return () => window.clearTimeout(hornTimeout);
   }, [running, timer]);
 
   // Timer logic
