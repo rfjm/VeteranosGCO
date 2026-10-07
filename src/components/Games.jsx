@@ -139,29 +139,17 @@ export default function Games() {
     }
   }, [selectedTraining, fetchTeams, fetchGameSummary]);
 
-  // Start the audio 1.5 seconds early so its audible horn lines up with 00:00.
+  // Start the audio one second early so its audible horn lines up with 00:00.
   useEffect(() => {
-    if (!running || hornStartedRef.current) return;
+    if (!running || timer !== 1 || hornStartedRef.current) return;
 
-    const startHorn = () => {
-      if (hornStartedRef.current) return;
-      hornStartedRef.current = true;
-      if (hornRef.current) {
-        hornRef.current.currentTime = 0;
-        hornRef.current.play().catch(() => {
-          console.warn("⚠️ Horn blocked until user interaction.");
-        });
-      }
-    };
-
-    // At 00:02, wait half a second: playback begins 1.5 seconds before zero.
-    if (timer === 2) {
-      const hornTimeout = window.setTimeout(startHorn, 500);
-      return () => window.clearTimeout(hornTimeout);
+    hornStartedRef.current = true;
+    if (hornRef.current) {
+      hornRef.current.currentTime = 0;
+      hornRef.current.play().catch(() => {
+        console.warn("⚠️ Horn blocked until user interaction.");
+      });
     }
-
-    // Fallback for a one-second timer or one resumed at 00:01.
-    if (timer === 1) startHorn();
   }, [running, timer]);
 
   // Timer logic
