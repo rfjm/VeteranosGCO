@@ -47,6 +47,7 @@ export default function Games() {
   const [endingTraining, setEndingTraining] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const hornRef = useRef(null);
+  const hornStartedRef = useRef(false);
   const scoreboardRef = useRef(null);
 
   useEffect(() => {
@@ -138,6 +139,19 @@ export default function Games() {
     }
   }, [selectedTraining, fetchTeams, fetchGameSummary]);
 
+  // Start the audio one second early so its audible horn lines up with 00:00.
+  useEffect(() => {
+    if (!running || timer !== 1 || hornStartedRef.current) return;
+
+    hornStartedRef.current = true;
+    if (hornRef.current) {
+      hornRef.current.currentTime = 0;
+      hornRef.current.play().catch(() => {
+        console.warn("⚠️ Horn blocked until user interaction.");
+      });
+    }
+  }, [running, timer]);
+
   // Timer logic
   useEffect(() => {
     let interval;
@@ -145,12 +159,6 @@ export default function Games() {
       interval = setInterval(() => setTimer((t) => t - 1), 1000);
     } else if (timer === 0 && running) {
       setRunning(false);
-      if (hornRef.current) {
-        hornRef.current.currentTime = 0;
-        hornRef.current.play().catch(() => {
-          console.warn("⚠️ Horn blocked until user interaction.");
-        });
-      }
 
       const action = getGameEndAction({
         timer,
@@ -182,6 +190,11 @@ export default function Games() {
   };
 
   const resetGame = () => {
+    hornStartedRef.current = false;
+    if (hornRef.current) {
+      hornRef.current.pause();
+      hornRef.current.currentTime = 0;
+    }
     setTimer(durationChoice);
     setTeam1Score(0);
     setTeam2Score(0);
@@ -191,6 +204,7 @@ export default function Games() {
 
   const updateDuration = (minutes, seconds) => {
     const newDuration = clampGameDuration(minutes, seconds);
+    hornStartedRef.current = false;
     setDurationChoice(newDuration);
     setTimer(newDuration);
     setGameNotice("");
